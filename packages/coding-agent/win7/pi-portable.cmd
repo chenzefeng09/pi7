@@ -11,16 +11,16 @@ set "PI_ROOT=%~dp0.."
 set "PI_NODE=%PI_ROOT%\node\node.exe"
 
 rem Use the bundled config dir unless the caller already set one (Start-pi.cmd does).
-rem When we set it ourselves, also (re)generate the config.txt args + web MCP entry
-rem so a freshly-extracted folder works even if Start-pi.cmd was never run.
 if not defined PI_CODING_AGENT_DIR (
 	set "PI_CODING_AGENT_DIR=%PI_ROOT%\config\agent"
-	"%PI_NODE%" "%~dp0gen-config.js" "%PI_ROOT%\config.txt" "%PI_ROOT%\config\agent" >nul 2>&1
-	"%PI_NODE%" "%~dp0gen-mcp.js" "%PI_ROOT%" "%PI_ROOT%\config\agent" >nul 2>&1
 )
+if not exist "%PI_CODING_AGENT_DIR%" mkdir "%PI_CODING_AGENT_DIR%" >nul 2>&1
 
 rem Silence Node 16's Win7 "unsupported platform" warning (unless caller set it).
 if not defined NODE_SKIP_PLATFORM_CHECK set "NODE_SKIP_PLATFORM_CHECK=1"
+
+rem Refresh the relocatable bundled MCP entry while preserving user-added servers.
+"%PI_NODE%" "%~dp0gen-mcp.js" "%PI_ROOT%" "%PI_CODING_AGENT_DIR%" >nul 2>&1
 
 rem The Win7/ConEmu render recipe (16-color, ASCII spinner, safe cursor width,
 rem throttled redraw) is now the pi HOST's own default whenever it detects it is
@@ -33,10 +33,6 @@ rem remain available below to override the default if you ever need to.
 rem Put the bundled Node and this launcher on PATH for any child that shells out.
 set "PATH=%PI_ROOT%\node;%~dp0;%PATH%"
 
-rem Args generated from the optional 2-line config.txt (may be empty).
-set "PIARGS="
-if exist "%~dp0_piargs.txt" set /p PIARGS=<"%~dp0_piargs.txt"
-
 rem Preload the Node 16 polyfills into pi + every node child it spawns (esp. the
 rem pi-subagents async runner, launched via jiti outside cli.win7.js). --require
 rem needs CJS on Node 16. Forward slashes: NODE_OPTIONS treats backslashes as escapes.
@@ -44,4 +40,4 @@ set "PI_CJS=%PI_ROOT%\app\node_modules\@earendil-works\pi-coding-agent\dist\poly
 set "PI_CJS=%PI_CJS:\=/%"
 set "NODE_OPTIONS=--require "%PI_CJS%""
 
-"%PI_NODE%" "%PI_ROOT%\app\node_modules\@earendil-works\pi-coding-agent\dist\cli.win7.js" %PIARGS% %*
+"%PI_NODE%" "%PI_ROOT%\app\node_modules\@earendil-works\pi-coding-agent\dist\cli.win7.js" %*

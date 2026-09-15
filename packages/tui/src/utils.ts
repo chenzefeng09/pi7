@@ -50,6 +50,7 @@ const terminalSpacingMarkRegex =
 const rgiEmojiRegex: RegExp = (() => {
 	try {
 		// Preferred: exact RGI emoji match (Node >= 20).
+		// biome-ignore lint/complexity/useRegexLiterals: Node 16 cannot parse a v-flag regex literal.
 		return new RegExp("^\\p{RGI_Emoji}$", "v");
 	} catch {
 		// Node < 20 has neither the `v` flag nor the RGI_Emoji string property.

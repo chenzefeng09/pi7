@@ -2,12 +2,14 @@
   "name": "pi-win7-runtime",
   "version": "1.0.0",
   "private": true,
-  "description": "Windows 7 / Node 16 install wrapper for the forked pi-coding-agent (undici@5). Place the packed pi-coding-agent tgz next to this file as pi-coding-agent.tgz, then run: npm install --ignore-scripts. See ../docs/win7.md.",
+  "description": "Windows 7 / Node 16 install wrapper for the patched pi AI, coding-agent, and TUI packages. Place all three tarballs next to this file, then run npm install --ignore-scripts. See ../docs/win7.md.",
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "file:pi-coding-agent.tgz"
+    "@earendil-works/pi-ai": "file:pi-ai.tgz",
+    "@earendil-works/pi-coding-agent": "file:pi-coding-agent.tgz",
+    "@earendil-works/pi-tui": "file:pi-tui.tgz"
   },
   "overrides": {
-    "glob": "10.4.5",
+    "glob": "10.5.0",
     "minimatch": "9.0.5",
     "hosted-git-info": "7.0.2",
     "lru-cache": "10.4.3",

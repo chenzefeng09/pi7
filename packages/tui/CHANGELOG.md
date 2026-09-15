@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Added Windows 7 console capability detection, safe-width rendering, 16-color fallback support, slower render throttling, and legacy-font glyph fallbacks.
+
 ## [0.84.4] - 2026-08-28
 
 ### Added

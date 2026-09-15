@@ -22,7 +22,7 @@
  *  - Blob                               -> Node 18  (node:buffer)
  *  - ReadableStream/Writable/Transform  -> Node 18  (node:stream/web)
  *  - structuredClone                    -> Node 17
- *  - AbortSignal.timeout                -> Node 17.3
+ *  - AbortSignal.timeout/any            -> Node 17.3/20.3
  *  - Array.prototype.findLast/Index     -> Node 18
  */
 "use strict";
@@ -105,6 +105,34 @@ if (AbortSignalCtor && typeof AbortSignalCtor.timeout !== "function") {
 		error.name = "TimeoutError";
 		const timer = setTimeout(() => controller.abort(error), ms);
 		if (typeof timer.unref === "function") timer.unref();
+		return controller.signal;
+	};
+}
+
+// AbortSignal.any(signals).
+if (AbortSignalCtor && typeof AbortSignalCtor.any !== "function") {
+	AbortSignalCtor.any = (signals) => {
+		const controller = new AbortController();
+		const listeners = new Map();
+		const cleanup = () => {
+			for (const [signal, listener] of listeners) {
+				signal.removeEventListener("abort", listener);
+			}
+			listeners.clear();
+		};
+		for (const signal of signals) {
+			if (signal.aborted) {
+				controller.abort(signal.reason);
+				cleanup();
+				return controller.signal;
+			}
+			const listener = () => {
+				controller.abort(signal.reason);
+				cleanup();
+			};
+			listeners.set(signal, listener);
+			signal.addEventListener("abort", listener, { once: true });
+		}
 		return controller.signal;
 	};
 }

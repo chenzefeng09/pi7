@@ -1,0 +1,27 @@
+========================================================================
+ pi 配置说明
+========================================================================
+
+便携版启动脚本会设置：
+
+  PI_CODING_AGENT_DIR=<便携版目录>\config\agent
+
+这只是让 pi 直接使用便携版目录内的配置，不会复制或覆盖
+%USERPROFILE%\.pi\agent。
+
+请使用 pi 原生配置文件：
+
+  config\agent\auth.json       Provider 密钥
+  config\agent\settings.json   默认 Provider、模型和界面设置
+  config\agent\models.json     自定义 Provider 和模型
+  config\agent\mcp.json        MCP 服务
+
+也可以在 pi 中使用 /login 和 /settings。此版本不读取 config.txt，不生成
+models.json，也不会生成额外的启动参数。
+
+离线升级时不要覆盖旧目录。将新版解压到相邻的新目录，然后在新版目录运行
+Upgrade-from-old.cmd。脚本会迁移用户配置和会话、保留新版插件，并生成
+upgrade-report-*.txt；详细步骤见 UPGRADE.txt。
+
+注意：auth.json 和 models.json 中可能包含密钥，分发便携包前请检查。
+========================================================================

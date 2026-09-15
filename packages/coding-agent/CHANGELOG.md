@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Added a Windows 7 portable build path using Node 16, runtime polyfills, a patched HTTP dispatcher, and portable native configuration under `PI_CODING_AGENT_DIR`.
+
 ## [0.84.4] - 2026-08-28
 
 ### New Features

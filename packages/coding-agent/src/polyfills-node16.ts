@@ -15,7 +15,7 @@
  *  - Blob                               -> Node 18  (node:buffer)
  *  - ReadableStream/Writable/Transform  -> Node 18  (node:stream/web)
  *  - structuredClone                    -> Node 17
- *  - AbortSignal.timeout                -> Node 17.3
+ *  - AbortSignal.timeout/any            -> Node 17.3/20.3
  *  - Array.prototype.findLast/Index     -> Node 18
  */
 import { Blob as NodeBlob } from "node:buffer";
@@ -104,6 +104,35 @@ if (AbortSignalCtor && typeof AbortSignalCtor.timeout !== "function") {
 
 interface AbortSignalConstructor {
 	timeout?: (ms: number) => AbortSignal;
+	any?: (signals: AbortSignal[]) => AbortSignal;
+}
+
+// AbortSignal.any(signals).
+if (AbortSignalCtor && typeof AbortSignalCtor.any !== "function") {
+	AbortSignalCtor.any = (signals: AbortSignal[]): AbortSignal => {
+		const controller = new AbortController();
+		const listeners = new Map<AbortSignal, () => void>();
+		const cleanup = (): void => {
+			for (const [signal, listener] of listeners) {
+				signal.removeEventListener("abort", listener);
+			}
+			listeners.clear();
+		};
+		for (const signal of signals) {
+			if (signal.aborted) {
+				controller.abort(signal.reason);
+				cleanup();
+				return controller.signal;
+			}
+			const listener = (): void => {
+				controller.abort(signal.reason);
+				cleanup();
+			};
+			listeners.set(signal, listener);
+			signal.addEventListener("abort", listener, { once: true });
+		}
+		return controller.signal;
+	};
 }
 
 // Array.prototype.findLast / findLastIndex (ES2023).

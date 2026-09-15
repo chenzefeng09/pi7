@@ -1,0 +1,35 @@
+========================================================================
+ pi for Windows 7 - offline upgrade
+========================================================================
+
+Do not extract a new release over the old portable directory.
+
+1. Close pi in both the old and new directories.
+2. Extract the new release beside the old directory.
+3. Run Upgrade-from-old.cmd in the new directory.
+
+The default source is the sibling directory named pi-win7-portable. To use a
+different source, open cmd in the new directory and run:
+
+  Upgrade-from-old.cmd "C:\path\to\old-pi-win7-portable"
+
+The upgrade tool:
+
+  - never writes to or deletes the old directory;
+  - migrates auth, models, MCP settings, sessions, history, local extensions,
+    skills, prompts, themes, and other user files under config\agent;
+  - merges settings.json while keeping this release's Win7-compatible bundled
+    extension versions;
+  - keeps the new npm and tool files, copying only files missing from the new
+    bundle so offline custom packages remain available;
+  - refreshes the bundled MCP paths for the new directory;
+  - backs up replaced new-config files under _upgrade-backups;
+  - writes upgrade-report-*.txt in the new directory.
+
+Local changes to app, node, tools, conemu, Start-pi.cmd, or other runtime files
+cannot be merged automatically. Compare those changes with the unchanged old
+directory and reapply them manually. The report records this limitation.
+
+Rollback: close the new pi and launch Start-pi.cmd from the old directory.
+========================================================================
+

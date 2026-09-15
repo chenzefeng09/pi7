@@ -18,7 +18,7 @@ You still build/assemble on a modern machine and copy artifacts to the Win7 box.
    `Headers`/`FormData`/`File`/`ProxyAgent`/`Agent`/`setGlobalDispatcher`.
 2. **`src/polyfills-node16.ts`** installs the Node 22 globals Node 16 lacks:
    `globalThis.crypto`, `fetch` family, `Blob`, `ReadableStream`/`WritableStream`/
-   `TransformStream`, `structuredClone`, `AbortSignal.timeout`,
+   `TransformStream`, `structuredClone`, `AbortSignal.timeout`/`any`,
    `Array.prototype.findLast`/`findLastIndex`. Feature-guarded → no-op on modern Node.
 3. **`src/cli.win7.ts`** — entry that imports the polyfills first, then the normal CLI.
 4. **`src/core/http-dispatcher.ts`** — version-adaptive: uses undici@8's
@@ -52,6 +52,10 @@ You still build/assemble on a modern machine and copy artifacts to the Win7 box.
     becomes `●`, and the tree-selector fold markers `⊞`/`⊟` become `+`/`-`. A full
     glyph audit found the rest of pi's UI glyphs (box drawing, blocks, arrows, `•…›·`)
     are covered by Consolas.
+11. **pi-ai JSON catalogs** — the normal build emits `with { type: "json" }`, which
+    Node 16 cannot parse. The Win7 packaging step inlines those JSON files into the
+    built JavaScript before packing `pi-ai`; source and normal release builds stay
+    unchanged.
 
 ## Dependency downgrades (Node 16 compatibility)
 
@@ -62,7 +66,7 @@ their last Node-16-compatible versions via npm `overrides` (see `win7/package.js
 |---|---|---|---|
 | `lru-cache` | hosted-git-info, path-scurry | `10.4.3` | v11 calls `diagnostics_channel.tracingChannel` (Node 20+) at load |
 | `path-scurry` | glob | `1.11.1` | v2 needs lru-cache@11 |
-| `glob` | coding-agent | `10.4.5` | v13 requires Node 20 |
+| `glob` | coding-agent | `10.5.0` | v13 requires Node 20 |
 | `minimatch` | coding-agent, glob | `9.0.5` | v10 requires Node 18 |
 | `hosted-git-info` | coding-agent | `7.0.2` | v9 pulls lru-cache@11 |
 
@@ -79,42 +83,43 @@ OpenRouter, DeepSeek, …) use direct `fetch` and work.
 npm install --ignore-scripts
 npm run build
 
-# 2. Pack the forked coding-agent WITHOUT the undici@8 shrinkwrap
-mv packages/coding-agent/npm-shrinkwrap.json /tmp/sw.bak
+# 2. Refresh the coding-agent install metadata after dependency changes
+node scripts/generate-coding-agent-shrinkwrap.mjs
+node scripts/generate-coding-agent-install-lock.mjs
+
+# 3. Make the pi-ai output parseable on Node 16, then pack all patched packages
+node packages/coding-agent/win7/patch-ai-json-imports.mjs packages/ai/dist
+( cd packages/ai && npm pack --ignore-scripts --pack-destination /tmp )
 ( cd packages/coding-agent && npm pack --ignore-scripts --pack-destination /tmp )
-mv /tmp/sw.bak packages/coding-agent/npm-shrinkwrap.json
-# -> /tmp/earendil-works-pi-coding-agent-<ver>.tgz
+( cd packages/tui && npm pack --ignore-scripts --pack-destination /tmp )
 ```
 
 ## Install on Windows 7
 
-Copy to the Win7 box: the packed `*.tgz`, `packages/coding-agent/win7/package.json`
-(the overrides wrapper), and `packages/coding-agent/win7/pi.cmd`. Put the tgz next to
-`package.json` as `pi-coding-agent.tgz`, then, with a Node 16.x runtime on PATH:
+Copy all three tarballs and `packages/coding-agent/win7/package.json` to the target app
+directory. Rename the tarballs to `pi-ai.tgz`, `pi-coding-agent.tgz`, and `pi-tui.tgz`,
+then use the bundled Node 16/npm runtime:
 
 ```bat
-cd C:\work\pi_win7
+cd C:\work\pi-win7-portable\app
 npm install --ignore-scripts --no-audit --no-fund
-
-REM Overwrite the registry tui with the v-flag-fixed build:
-copy /Y path\to\forked\packages\tui\dist\utils.js ^
-  node_modules\@earendil-works\pi-tui\dist\utils.js
 ```
 
-The tui `utils.js` overwrite is required because the registry `pi-tui@0.80.3` still has
-the parse-time `v`-flag regexes. (Alternatively, pack and install the forked pi-tui.)
+The wrapper depends directly on all three local tarballs, so coding-agent resolves the
+Node-16-compatible AI and TUI builds rather than their registry builds.
 
 ## Run (in ConEmu)
 
 ```bat
-cd C:\work\pi_win7
-pi.cmd --version
-pi.cmd            REM interactive TUI — must be run in ConEmu, not stock conhost
+cd C:\work\pi-win7-portable
+tools\pi.cmd --version
+Start-pi.cmd       REM interactive TUI in the bundled ConEmu
 ```
 
-Provider auth lives in `%USERPROFILE%\.pi\agent\auth.json` (copy it, or run
-`/login` inside pi). `settings.json` there holds default provider/model and `shellPath`
-(point it at the Win7 machine's own shell, e.g. `C:\Program Files\Git\bin\bash.exe`).
+The portable launchers set `PI_CODING_AGENT_DIR` to `config\agent`; they do not copy
+or overwrite `%USERPROFILE%\.pi\agent`. Configure native `auth.json`, `settings.json`,
+`models.json`, and `mcp.json` there, or use `/login` and `/settings` inside pi. There
+is no `config.txt` translation or generated model/argument file.
 
 ## ConEmu setup
 
@@ -145,9 +150,9 @@ Pre-place the last Win7-compatible builds instead (no further download is attemp
 the binaries exist):
 
 - [ripgrep 13.0.0](https://github.com/BurntSushi/ripgrep/releases/tag/13.0.0)
-  `ripgrep-13.0.0-x86_64-pc-windows-msvc.zip` → `%USERPROFILE%\.pi\agent\bin\rg.exe`
+  `ripgrep-13.0.0-x86_64-pc-windows-msvc.zip` → `config\agent\bin\rg.exe`
 - [fd v8.7.1](https://github.com/sharkdp/fd/releases/tag/v8.7.1)
-  `fd-v8.7.1-x86_64-pc-windows-msvc.zip` → `%USERPROFILE%\.pi\agent\bin\fd.exe`
+  `fd-v8.7.1-x86_64-pc-windows-msvc.zip` → `config\agent\bin\fd.exe`
 
 ## Known limitations on Win7
 
