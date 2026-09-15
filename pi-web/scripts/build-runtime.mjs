@@ -129,6 +129,10 @@ function installApp() {
 	packPackage("packages/ai", "pi-ai.tgz");
 	packPackage("packages/tui", "pi-tui.tgz");
 	packPackage("packages/coding-agent", "pi-coding-agent.tgz");
+	// A lockfile from an earlier install pins the old file: tarball integrity, and npm then
+	// reuses that cached tarball instead of the freshly packed one — silently shipping stale
+	// code whenever the package version did not change.
+	rmSync(join(appDir, "package-lock.json"), { force: true });
 	run(NPM, ["install", "--ignore-scripts"], { cwd: appDir });
 }
 
