@@ -118,10 +118,12 @@ async function main() {
 		return true;
 	})()`);
 	await sleep(200);
+	// While a turn is running the composer only shows the Stop button — the queued path is
+	// entered through the textarea's Enter key, which the composer maps to a followUp send.
 	const clicked = await evaluate(`(() => {
-		const button = Array.from(document.querySelectorAll("button")).find((candidate) => candidate.title === "Send");
-		if (!button) return false;
-		button.click();
+		const textarea = document.querySelector("textarea");
+		if (!textarea) return false;
+		textarea.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
 		return true;
 	})()`);
 

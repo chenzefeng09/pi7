@@ -26,6 +26,6 @@ const markPointer = () => document.documentElement.removeAttribute("data-input")
 window.addEventListener("keydown", markKeyboard, true);
 window.addEventListener("mousedown", markPointer, true);
 
-if (import.meta.env.DEV) {
-	(window as unknown as { __piStore?: typeof usePiStore }).__piStore = usePiStore;
-}
+// Also exposed in packaged builds: the e2e suite (scripts/e2e-*.mjs) drives the app
+// over CDP through this handle.
+(window as unknown as { __piStore?: typeof usePiStore }).__piStore = usePiStore;

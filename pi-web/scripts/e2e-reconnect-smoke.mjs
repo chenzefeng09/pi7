@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import http from "node:http";
 import WebSocket from "ws";
 
@@ -83,6 +84,43 @@ async function connect(target) {
 	return { evaluate, send, socket };
 }
 
+/**
+ * Kill the pi rpc child the app spawned. The command line always contains the coding-agent
+ * cli and `--mode rpc`; that pair does not appear in the Electron, test-runner, or shell
+ * processes, so it is a safe discriminator. Runs from the same machine as the app.
+ */
+function killPiRpcProcess() {
+	const matcher =
+		process.platform === "win32"
+			? `$_.CommandLine -match 'coding-agent' -and $_.CommandLine -match '--mode.*rpc'`
+			: "coding-agent.*--mode.*rpc";
+	let output;
+	if (process.platform === "win32") {
+		output = execFileSync(
+			"powershell",
+			[
+				"-NoProfile",
+				"-Command",
+				`Get-CimInstance Win32_Process | Where-Object { ${matcher} } | ForEach-Object { $_.ProcessId }`,
+			],
+			{ encoding: "utf8" },
+		);
+	} else {
+		try {
+			output = execFileSync("pgrep", ["-f", matcher], { encoding: "utf8" });
+		} catch {
+			output = "";
+		}
+	}
+	const pids = output.split(/\s+/).filter(Boolean).map(Number).filter((pid) => pid !== process.pid);
+	for (const pid of pids) {
+		try {
+			process.kill(pid);
+		} catch {}
+	}
+	return pids;
+}
+
 async function main() {
 	const target = await waitForTarget();
 	const { evaluate, send, socket } = await connect(target);
@@ -105,20 +143,23 @@ async function main() {
 		if (typeof sessionIdBefore === "string") break;
 		await sleep(500);
 	}
-	await evaluate(`window.pi.stop()`);
+	// A real crash, not `window.pi.stop()`: a graceful stop is reported with `stopped: true`
+	// and the app intentionally shows no reconnect banner for it. Only an exit the app did
+	// not ask for exercises the banner → Reconnect button path.
+	killPiRpcProcess();
 
+	// The banner text is localized ("Reconnect"/"重新连接"); match both shipped locales.
+	const bannerExpr = `document.body.innerText.includes("Reconnect") || document.body.innerText.includes("重新连接")`;
 	let bannerSeen = false;
 	const bannerDeadline = Date.now() + 30000;
 	while (Date.now() < bannerDeadline) {
-		bannerSeen = await evaluate(
-			`document.body.innerText.includes("Reconnect")`,
-		);
+		bannerSeen = await evaluate(bannerExpr);
 		if (bannerSeen === true) break;
 		await sleep(250);
 	}
 
 	const clicked = await evaluate(`(() => {
-		const button = Array.from(document.querySelectorAll("button")).find((candidate) => candidate.innerText.trim() === "Reconnect");
+		const button = Array.from(document.querySelectorAll("button")).find((candidate) => ["Reconnect", "重新连接"].includes(candidate.innerText.trim()));
 		if (!button) return false;
 		button.click();
 		return true;
@@ -130,7 +171,7 @@ async function main() {
 	while (Date.now() < recoverDeadline) {
 		const state = await evaluate(`window.pi.getState()`);
 		sessionIdAfter = state?.data?.sessionId ?? null;
-		const reconnectVisible = await evaluate(`document.body.innerText.includes("Reconnect")`);
+		const reconnectVisible = await evaluate(bannerExpr);
 		recovered = typeof sessionIdAfter === "string" && reconnectVisible === false;
 		if (recovered) break;
 		await sleep(500);
