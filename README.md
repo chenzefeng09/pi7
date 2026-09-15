@@ -18,6 +18,8 @@ This is a fork of [earendil-works/pi](https://github.com/earendil-works/pi) by *
 * **Windows 7 support**: Node 16 polyfills, a `pi-win7` CLI entry, TUI compatibility fixes, and packaging scripts under [packages/coding-agent/win7](packages/coding-agent/win7)
 * **Multi-session RPC**: per-session command scheduling and session-scoped state in the JSONL RPC mode
 
+[![π7 — pi-web desktop UI](pi-web/docs/screenshot.png)](pi-web)
+
 Licensing: the whole repository is MIT, same as upstream (see [LICENSE](LICENSE)). Upstream code © Mario Zechner; the additions above © chenzefeng.
 
 # Pi Agent Harness
