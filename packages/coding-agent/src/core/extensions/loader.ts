@@ -77,7 +77,7 @@ const require = createRequire(import.meta.url);
 
 const isNodeSeaBinary =
 	("sea" in process.features && process.features.sea === true) ||
-	process.getBuiltinModule("node:sea")?.isSea() === true;
+	process.getBuiltinModule?.("node:sea")?.isSea() === true;
 declare const PI_BUNDLED_NODE: boolean;
 const isBundledNode = typeof PI_BUNDLED_NODE !== "undefined" && PI_BUNDLED_NODE;
 const isTypeScriptSourceRuntime = !isBunBinary && path.extname(fileURLToPath(import.meta.url)) === ".ts";
@@ -115,9 +115,7 @@ function getAliases(): Record<string, string> {
 		// installed layout mirrors the workspace path with the leading
 		// package-shortname segment dropped (e.g. "ai/dist/compat.js" ->
 		// "<pkgDir>/dist/compat.js").
-		const pkgName = specifier.startsWith("@")
-			? specifier.split("/").slice(0, 2).join("/")
-			: specifier.split("/")[0];
+		const pkgName = specifier.startsWith("@") ? specifier.split("/").slice(0, 2).join("/") : specifier.split("/")[0];
 		const installedRelative = workspaceRelativePath.split("/").slice(1).join("/");
 		for (const base of require.resolve.paths(pkgName) ?? []) {
 			const candidate = path.join(base, ...pkgName.split("/"), ...installedRelative.split("/"));

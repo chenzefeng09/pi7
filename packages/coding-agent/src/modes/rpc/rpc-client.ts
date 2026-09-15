@@ -62,6 +62,9 @@ export class RpcClient {
 	private requestId = 0;
 	private stderr = "";
 	private exitError: Error | null = null;
+	// Session handles with a run in flight. "" tracks runs whose session id is not yet known
+	// (a prompt response can arrive before its first agent_start event).
+	private busySessions = new Set<string>();
 	private options: RpcClientOptions;
 
 	constructor(options: RpcClientOptions = {}) {
@@ -77,6 +80,7 @@ export class RpcClient {
 		}
 
 		this.exitError = null;
+		this.stderr = "";
 
 		const cliPath = this.options.cliPath ?? "dist/cli.js";
 		const args = ["--mode", "rpc"];
@@ -109,12 +113,14 @@ export class RpcClient {
 			const error = this.createProcessExitError(code, signal);
 			this.exitError = error;
 			this.rejectPendingRequests(error);
+			this.process = null;
 		});
 		childProcess.once("error", (error) => {
 			if (this.process !== childProcess) return;
 			const processError = new Error(`Agent process error: ${error.message}. Stderr: ${this.stderr}`);
 			this.exitError = processError;
 			this.rejectPendingRequests(processError);
+			this.process = null;
 		});
 		childProcess.stdin?.on("error", (error) => {
 			if (this.process !== childProcess) return;
@@ -125,15 +131,24 @@ export class RpcClient {
 		});
 
 		// Set up strict JSONL reader for stdout.
-		this.stopReadingStdout = attachJsonlLineReader(childProcess.stdout!, (line) => {
-			this.handleLine(line);
-		});
+		this.stopReadingStdout = attachJsonlLineReader(
+			childProcess.stdout!,
+			(line) => {
+				this.handleLine(line);
+			},
+			(error) => {
+				if (this.process !== childProcess) return;
+				this.exitError = error;
+				this.rejectPendingRequests(error);
+				childProcess.kill();
+			},
+		);
 
 		// Wait a moment for process to initialize
 		await new Promise((resolve) => setTimeout(resolve, 100));
 
-		if (this.process.exitCode !== null) {
-			const error = this.exitError ?? this.createProcessExitError(this.process.exitCode, this.process.signalCode);
+		if (childProcess.exitCode !== null) {
+			const error = this.exitError ?? this.createProcessExitError(childProcess.exitCode, childProcess.signalCode);
 			this.exitError = error;
 			throw error;
 		}
@@ -147,6 +162,7 @@ export class RpcClient {
 
 		this.stopReadingStdout?.();
 		this.stopReadingStdout = null;
+		this.rejectPendingRequests(new Error("Agent RPC client stopped"));
 		this.process.kill("SIGTERM");
 
 		// Wait for process to exit
@@ -163,6 +179,7 @@ export class RpcClient {
 		});
 
 		this.process = null;
+		this.busySessions.clear();
 		this.pendingRequests.clear();
 	}
 
@@ -458,10 +475,11 @@ export class RpcClient {
 	// =========================================================================
 
 	/**
-	 * Wait for agent to become idle (no streaming).
-	 * Resolves when agent_settled event is received.
+	 * Wait for all agents with a run in flight to become idle.
+	 * Resolves once every busy session has emitted agent_settled.
 	 */
 	waitForIdle(timeout = 60000): Promise<void> {
+		if (this.busySessions.size === 0) return Promise.resolve();
 		return new Promise((resolve, reject) => {
 			const timer = setTimeout(() => {
 				unsubscribe();
@@ -469,7 +487,7 @@ export class RpcClient {
 			}, timeout);
 
 			const unsubscribe = this.onEvent((event) => {
-				if (event.type === "agent_settled") {
+				if (event.type === "agent_settled" && this.busySessions.size === 0) {
 					clearTimeout(timer);
 					unsubscribe();
 					resolve();
@@ -514,23 +532,58 @@ export class RpcClient {
 	// =========================================================================
 
 	private handleLine(line: string): void {
+		let data: unknown;
 		try {
-			const data = JSON.parse(line);
+			data = JSON.parse(line);
+		} catch (error) {
+			const protocolError = new Error(`Invalid RPC JSON: ${error instanceof Error ? error.message : String(error)}`);
+			this.exitError = protocolError;
+			this.rejectPendingRequests(protocolError);
+			this.process?.kill();
+			return;
+		}
 
-			// Check if it's a response to a pending request
-			if (data.type === "response" && data.id && this.pendingRequests.has(data.id)) {
-				const pending = this.pendingRequests.get(data.id)!;
-				this.pendingRequests.delete(data.id);
-				pending.resolve(data as RpcResponse);
-				return;
+		if (typeof data !== "object" || data === null || Array.isArray(data)) {
+			const protocolError = new Error("Invalid RPC message: expected a JSON object");
+			this.exitError = protocolError;
+			this.rejectPendingRequests(protocolError);
+			this.process?.kill();
+			return;
+		}
+		const record = data as { id?: unknown; type?: unknown; success?: unknown; sessionId?: unknown };
+		const eventSessionId = typeof record.sessionId === "string" ? record.sessionId : "";
+		if (record.type === "agent_start" || record.type === "turn_start") this.busySessions.add(eventSessionId);
+		if (record.type === "agent_settled") {
+			this.busySessions.delete(eventSessionId);
+			// A settle can close out a run that was marked busy by its prompt response before
+			// any event carried the real session id.
+			this.busySessions.delete("");
+		}
+		// Check if it's a response to a pending request.
+		if (record.type === "response" && typeof record.id === "string" && this.pendingRequests.has(record.id)) {
+			const pending = this.pendingRequests.get(record.id)!;
+			this.pendingRequests.delete(record.id);
+			const response = record as RpcResponse;
+			if (response.success && response.command === "prompt") {
+				// The prompt was accepted and a run is starting, but agent_start has not arrived
+				// yet. Mark the session busy now so waitForIdle() does not resolve in the gap.
+				const started = (response as { data?: { started?: boolean; sessionId?: string } }).data;
+				if (started?.started === true) this.busySessions.add(started.sessionId ?? "");
 			}
+			pending.resolve(response);
+			return;
+		}
 
-			// Otherwise it's an event
-			for (const listener of this.eventListeners) {
+		// Otherwise it's an event. A consumer callback must not turn a valid protocol message into
+		// a parse failure or prevent later listeners from receiving it.
+		for (const listener of this.eventListeners) {
+			try {
 				listener(data as JsonAgentSessionEvent);
+			} catch (error) {
+				process.stderr.write(
+					`RPC event listener failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,
+				);
 			}
-		} catch {
-			// Ignore non-JSON lines
 		}
 	}
 

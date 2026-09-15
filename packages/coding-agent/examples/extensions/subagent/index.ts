@@ -24,6 +24,7 @@ import {
 	type ExtensionAPI,
 	getAgentDir,
 	getMarkdownTheme,
+	type ThemeColor,
 	withFileMutationQueue,
 } from "@earendil-works/pi-coding-agent";
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
@@ -71,7 +72,7 @@ function formatUsageStats(
 function formatToolCall(
 	toolName: string,
 	args: Record<string, unknown>,
-	themeFg: (color: any, text: string) => string,
+	themeFg: (color: ThemeColor, text: string) => string,
 ): string {
 	const shortenPath = (p: string) => {
 		const home = os.homedir();
@@ -201,7 +202,11 @@ function truncateParallelOutput(output: string): string {
 	return `${truncated}\n\n[Output truncated: ${byteLength - Buffer.byteLength(truncated, "utf8")} bytes omitted. Full output preserved in tool details.]`;
 }
 
-type DisplayItem = { type: "text"; text: string } | { type: "toolCall"; name: string; args: Record<string, any> };
+type DisplayItem = { type: "text"; text: string } | { type: "toolCall"; name: string; args: Record<string, unknown> };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 function getDisplayItems(messages: Message[]): DisplayItem[] {
 	const items: DisplayItem[] = [];
@@ -349,13 +354,28 @@ async function runSingleAgent(
 				stdio: ["ignore", "pipe", "pipe"],
 			});
 			let buffer = "";
+			// Killing a child that emitted garbage is not an abort: the flag belongs to the
+			// caller's signal, so a protocol failure must not report itself as one.
+			const killProc = () => {
+				proc.kill("SIGTERM");
+				setTimeout(() => {
+					if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL");
+				}, 5000).unref();
+			};
 
 			const processLine = (line: string) => {
 				if (!line.trim()) return;
-				let event: any;
+				let event: unknown;
 				try {
 					event = JSON.parse(line);
-				} catch {
+				} catch (error) {
+					currentResult.errorMessage = `Child emitted invalid JSON: ${error instanceof Error ? error.message : String(error)}`;
+					killProc();
+					return;
+				}
+				if (!isRecord(event)) {
+					currentResult.errorMessage = "Child emitted a non-object JSON event";
+					killProc();
 					return;
 				}
 
@@ -408,15 +428,12 @@ async function runSingleAgent(
 			});
 
 			if (signal) {
-				const killProc = () => {
+				const onAbort = () => {
 					wasAborted = true;
-					proc.kill("SIGTERM");
-					setTimeout(() => {
-						if (!proc.killed) proc.kill("SIGKILL");
-					}, 5000);
+					killProc();
 				};
-				if (signal.aborted) killProc();
-				else signal.addEventListener("abort", killProc, { once: true });
+				if (signal.aborted) onAbort();
+				else signal.addEventListener("abort", onAbort, { once: true });
 			}
 		});
 

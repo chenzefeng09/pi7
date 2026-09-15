@@ -223,6 +223,37 @@ export class AgentSessionRuntime {
 		return { cancelled: false };
 	}
 
+	/**
+	 * Create an additional runtime for another session without disturbing this one.
+	 *
+	 * Hosts that keep several sessions alive in a single process (the RPC protocol's
+	 * `open_session` command) use this: the returned runtime owns its own cwd-bound services
+	 * and session, and can stream while this one keeps running. No `session_before_switch`
+	 * handler runs because nothing is being replaced.
+	 */
+	async openSibling(options?: { cwd?: string; sessionPath?: string }): Promise<AgentSessionRuntime> {
+		const sessionManager = options?.sessionPath
+			? SessionManager.open(options.sessionPath, undefined, options.cwd)
+			: SessionManager.create(options?.cwd ?? this.cwd, this.session.sessionManager.getSessionDir());
+		assertSessionCwdExists(sessionManager, this.cwd);
+		const result = await this.createRuntime({
+			cwd: sessionManager.getCwd(),
+			agentDir: this.services.agentDir,
+			sessionManager,
+			sessionStartEvent: {
+				type: "session_start",
+				reason: options?.sessionPath ? "resume" : "new",
+			},
+		});
+		return new AgentSessionRuntime(
+			result.session,
+			result.services,
+			this.createRuntime,
+			result.diagnostics,
+			result.modelFallbackMessage,
+		);
+	}
+
 	async newSession(options?: {
 		parentSession?: string;
 		setup?: (sessionManager: SessionManager) => Promise<void>;

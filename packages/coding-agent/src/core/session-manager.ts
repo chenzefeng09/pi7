@@ -10,6 +10,8 @@ import {
 	openSync,
 	readdirSync,
 	readSync,
+	renameSync,
+	rmSync,
 	statSync,
 	writeFileSync,
 } from "fs";
@@ -979,13 +981,31 @@ export class SessionManager {
 
 	private _rewriteFile(): void {
 		if (!this.persist || !this.sessionFile) return;
-		const fd = openSync(this.sessionFile, "w");
+		const temporary = `${this.sessionFile}.${process.pid}.${randomUUID()}.tmp`;
 		try {
-			for (const entry of this.fileEntries) {
-				writeFileSync(fd, `${JSON.stringify(entry)}\n`);
+			const fd = openSync(temporary, "wx");
+			try {
+				for (const entry of this.fileEntries) {
+					writeFileSync(fd, `${JSON.stringify(entry)}\n`);
+				}
+			} finally {
+				closeSync(fd);
 			}
+			renameSync(temporary, this.sessionFile);
+		} catch (error) {
+			// POSIX rename replaces the destination. Windows rejects that operation, so remove only
+			// this known session path before retrying; a failed retry leaves the staged copy intact.
+			if ((error as NodeJS.ErrnoException).code !== "EEXIST" && (error as NodeJS.ErrnoException).code !== "EPERM") {
+				throw error;
+			}
+			rmSync(this.sessionFile, { force: true });
+			renameSync(temporary, this.sessionFile);
 		} finally {
-			closeSync(fd);
+			try {
+				if (existsSync(temporary)) rmSync(temporary, { force: true });
+			} catch {
+				// Preserve the original rewrite result.
+			}
 		}
 	}
 

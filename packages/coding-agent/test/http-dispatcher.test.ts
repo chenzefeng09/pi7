@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import net from "node:net";
 import tls from "node:tls";
 import * as undici from "undici";
@@ -5,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyHttpProxySettings, configureHttpDispatcher } from "../src/core/http-dispatcher.ts";
 
 const PROXY_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY"] as const;
-const DISPATCHER_PROXY_ENV_KEYS = [...PROXY_ENV_KEYS, "http_proxy", "https_proxy"] as const;
+const DISPATCHER_PROXY_ENV_KEYS = [...PROXY_ENV_KEYS, "http_proxy", "https_proxy", "NO_PROXY", "no_proxy"] as const;
 
 describe("http proxy settings", () => {
 	let savedEnv: Record<(typeof PROXY_ENV_KEYS)[number], string | undefined>;
@@ -109,5 +110,24 @@ describe("http dispatcher", () => {
 		);
 		expect(connectSpy.mock.calls[0]?.[0]).not.toHaveProperty("autoSelectFamily");
 		expect(net.getDefaultAutoSelectFamilyAttemptTimeout()).toBe(originalAttemptTimeoutMs);
+	});
+
+	it("honors NO_PROXY for the legacy undici dispatcher", async () => {
+		const server = createServer((_request, response) => {
+			response.end("direct");
+		});
+		await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+		try {
+			const address = server.address();
+			if (!address || typeof address === "string") throw new Error("Test server did not expose a port");
+			process.env.HTTP_PROXY = "http://127.0.0.1:1";
+			process.env.HTTPS_PROXY = "http://127.0.0.1:1";
+			process.env.NO_PROXY = "127.0.0.1";
+			configureHttpDispatcher();
+			const response = await undici.fetch(`http://127.0.0.1:${address.port}`);
+			expect(await response.text()).toBe("direct");
+		} finally {
+			await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+		}
 	});
 });

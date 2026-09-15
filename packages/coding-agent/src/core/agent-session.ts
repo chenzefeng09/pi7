@@ -249,8 +249,13 @@ export interface PromptOptions {
 	streamingBehavior?: "steer" | "followUp";
 	/** Source of input for extension input event handlers. Defaults to "interactive". */
 	source?: InputSource;
-	/** Internal hook used by RPC mode to observe prompt preflight acceptance or rejection. */
-	preflightResult?: (success: boolean) => void;
+	/**
+	 * Internal hook used by RPC mode to observe prompt preflight acceptance or rejection.
+	 * `willStart` is true only when acceptance is immediately followed by `_runAgentPrompt`,
+	 * i.e. an `agent_start`/`agent_settled` pair is on the way. Queued, extension-handled,
+	 * and input-handled prompts report `willStart` false.
+	 */
+	preflightResult?: (success: boolean, willStart?: boolean) => void;
 }
 
 /** Options for model/thinking mutations. */
@@ -1313,7 +1318,7 @@ export class AgentSession {
 			return;
 		}
 
-		preflightResult?.(true);
+		preflightResult?.(true, true);
 		await this._runAgentPrompt(messages);
 	}
 
