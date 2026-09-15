@@ -936,11 +936,14 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 				cancelPendingRequests(closeId);
 				closing.unsubscribe?.();
 				closing.unsubscribeBackpressure?.();
-				await closing.runtime.dispose();
+				// Re-point the active handle before disposing: a dispose that throws must not leave
+				// `activeHandleId` on a handle that is no longer in the map, or every untagged
+				// command afterwards fails with "Active session ... is not open".
 				if (activeHandleId === closeId) {
 					const next = handles.keys().next();
 					if (!next.done) activateHandle(next.value);
 				}
+				await closing.runtime.dispose();
 				return success(id, "close_session", { activeSessionId: activeHandleId, closed: true });
 			}
 

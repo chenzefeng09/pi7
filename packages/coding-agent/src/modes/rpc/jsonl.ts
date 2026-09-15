@@ -27,12 +27,16 @@ export function attachJsonlLineReader(
 ): () => void {
 	const decoder = new StringDecoder("utf8");
 	let buffer = "";
+	// Where the next newline search starts: everything before it was already scanned, so a
+	// long line arriving in many chunks is scanned once instead of once per chunk.
+	let scanFrom = 0;
 	let failed = false;
 
 	const fail = (error: Error): void => {
 		if (failed) return;
 		failed = true;
 		buffer = "";
+		scanFrom = 0;
 		stream.off("data", onData);
 		stream.off("end", onEnd);
 		if (onError) onError(error);
@@ -46,21 +50,25 @@ export function attachJsonlLineReader(
 	const onData = (chunk: string | Buffer) => {
 		if (failed) return;
 		buffer += typeof chunk === "string" ? chunk : decoder.write(chunk);
+		let lineStart = 0;
 		while (true) {
-			const newlineIndex = buffer.indexOf("\n");
+			const newlineIndex = buffer.indexOf("\n", scanFrom);
 			if (newlineIndex === -1) {
+				buffer = lineStart > 0 ? buffer.slice(lineStart) : buffer;
+				scanFrom = buffer.length;
 				if (buffer.length > MAX_JSONL_LINE_LENGTH) {
 					fail(new Error(`JSONL input line exceeds ${MAX_JSONL_LINE_LENGTH} characters`));
 				}
 				return;
 			}
-			if (newlineIndex > MAX_JSONL_LINE_LENGTH) {
+			if (newlineIndex - lineStart > MAX_JSONL_LINE_LENGTH) {
 				fail(new Error(`JSONL input line exceeds ${MAX_JSONL_LINE_LENGTH} characters`));
 				return;
 			}
 
-			const line = buffer.slice(0, newlineIndex);
-			buffer = buffer.slice(newlineIndex + 1);
+			const line = buffer.slice(lineStart, newlineIndex);
+			lineStart = newlineIndex + 1;
+			scanFrom = lineStart;
 			emitLine(line);
 			if (failed) return;
 		}
