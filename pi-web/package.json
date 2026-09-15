@@ -1,7 +1,7 @@
 {
 	"name": "pi-web",
 	"private": true,
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"description": "Local desktop web UI for pi",
 	"author": "chenzefeng <chenzefeng09@users.noreply.github.com>",
 	"homepage": "https://github.com/chenzefeng09/pi7",
