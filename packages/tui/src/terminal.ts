@@ -54,7 +54,7 @@ export function isAppleTerminalSession(): boolean {
  * than by terminal name, so the degraded-but-correct render path applies
  * regardless of which terminal is used — not just ConEmu specifically.
  */
-export function isLegacyWindowsConsole(): boolean {
+function detectLegacyWindowsConsole(): boolean {
 	if (process.platform !== "win32") return false;
 	const [majorStr, minorStr] = os.release().split(".");
 	const major = Number(majorStr);
@@ -63,8 +63,16 @@ export function isLegacyWindowsConsole(): boolean {
 	return major === 6 && Number(minorStr) <= 1;
 }
 
+// The OS version cannot change while the process runs, and `columns` is read several times
+// per rendered frame, so the syscall behind os.release() happens once.
+const LEGACY_WINDOWS_CONSOLE = detectLegacyWindowsConsole();
+
+export function isLegacyWindowsConsole(): boolean {
+	return LEGACY_WINDOWS_CONSOLE;
+}
+
 function isConEmuOrLegacyWindows(): boolean {
-	return process.env.ConEmuANSI === "ON" || isLegacyWindowsConsole();
+	return process.env.ConEmuANSI === "ON" || LEGACY_WINDOWS_CONSOLE;
 }
 
 /**
