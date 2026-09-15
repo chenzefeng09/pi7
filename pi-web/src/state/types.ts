@@ -195,12 +195,12 @@ export interface SessionInfo {
 	updatedAt: string;
 }
 
-/** One task of a project's todo list, as the pi-todo extension stores it in `.pi/todo.json`. */
+/** One task of a session's todo list, normalized from a todo tool call's `details.todos`. */
 export interface TodoItem {
 	assignee?: string | null;
 	blockedBy?: string | null;
 	id: string;
-	priority: "critical" | "high" | "low" | "medium";
+	priority?: "critical" | "high" | "low" | "medium";
 	status: "blocked" | "done" | "in-progress" | "pending";
 	text: string;
 }
@@ -306,8 +306,4 @@ export interface PiState {
 	followUpMode: "all" | "one-at-a-time";
 	status: AppStatus;
 	thinkingLevel?: string;
-	/** The visible project's task list, read from its `.pi/todo.json`. */
-	todos: TodoItem[];
-	/** Root directory from which the current todo list was read. */
-	todosCwd?: string;
 }

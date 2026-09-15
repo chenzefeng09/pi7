@@ -85,11 +85,9 @@ export function App() {
 				if (!isVisible) return;
 				void current.syncSessionList();
 				// Token totals, cache reuse and the context readout only move when a turn ends,
-				// and the prompt of that turn only becomes forkable then as well. A finished turn
-				// is also when the todo tool has had its say.
+				// and the prompt of that turn only becomes forkable then as well.
 				void current.loadSessionStats().catch(() => {});
 				void current.loadForkMessages().catch(() => {});
-				void current.loadTodos().catch(() => {});
 			}
 		});
 		const offStderr = window.pi.onStderr(setStderr);

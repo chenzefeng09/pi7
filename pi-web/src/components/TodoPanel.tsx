@@ -1,5 +1,6 @@
 import { ChevronDown, CircleDashed, CircleCheck, Loader2, ListTodo, TriangleAlert } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { sessionTodos } from "../lib/todos";
 import { useBlankSession, usePiStore } from "../state/store";
 import type { TodoItem } from "../state/types";
 
@@ -28,20 +29,19 @@ function summaryOf(items: TodoItem[]): string {
 }
 
 /**
- * The visible project's task list, above the composer.
+ * The visible session's task list, above the composer.
  *
- * The list lives in the project (`.pi/todo.json`, written by the todo tool), so it survives
- * sessions and belongs to the folder rather than to one conversation. The header carries the
- * counts the harness shows; the rows are its status marks — spinning ring while a task is being
- * worked on, dashed circle while it waits, check when it is done.
+ * The list belongs to the conversation: it is read off the session's own transcript (the todo
+ * tool's call details), so switching sessions switches lists and a different project never
+ * shows this session's tasks. The rows carry the harness's status marks — spinning ring while
+ * a task is being worked on, dashed circle while it waits, check when it is done.
  */
 export function TodoPanel() {
 	const [open, setOpen] = useState(true);
-	const todos = usePiStore((state) => state.todos);
-	const todosCwd = usePiStore((state) => state.todosCwd);
-	const sessionCwd = usePiStore((state) => state.sessionCwd);
+	const messages = usePiStore((state) => state.messages);
 	const blank = useBlankSession();
-	if (blank || !sessionCwd || todosCwd !== sessionCwd || todos.length === 0) return null;
+	const todos = useMemo(() => sessionTodos(messages), [messages]);
+	if (blank || todos.length === 0) return null;
 	const summary = summaryOf(todos);
 
 	return (

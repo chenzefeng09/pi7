@@ -387,18 +387,6 @@ describe("pi store workspace and project-scoped data", () => {
 		expect(usePiStore.getState().status).toBe("idle");
 	});
 
-	it("ignores a todo read that belongs to a session switched away from", async () => {
-		const todoRead = deferred<unknown>();
-		stubPi(() => ({ data: {} }));
-		(globalThis as unknown as { window: { pi: Record<string, unknown> } }).window.pi.readFile = vi.fn(() => todoRead.promise);
-		usePiStore.setState({ activeHandleId: "a", sessionCwd: "D:/project-a", sessionLoading: false });
-		const loading = usePiStore.getState().loadTodos();
-		usePiStore.setState({ activeHandleId: "b", sessionCwd: "D:/project-b", todos: [], todosCwd: undefined });
-		todoRead.resolve({ type: "text", text: JSON.stringify({ items: [{ id: "A-1", priority: "low", status: "pending", text: "old" }] }) });
-		await loading;
-		expect(usePiStore.getState().todos).toEqual([]);
-		expect(usePiStore.getState().todosCwd).toBeUndefined();
-	});
 });
 
 describe("pi store turn usage footer", () => {
@@ -891,6 +879,84 @@ describe("pi store multi-session slices", () => {
 		expect(calls.filter((call) => call.type === "get_messages")).toEqual([
 			expect.objectContaining({ sessionId: "s2" }),
 		]);
+	});
+
+	it("keeps the opened session's cwd after projecting the fresh handle", async () => {
+		stubPi((command) => {
+			if (command.type === "open_session") {
+				return {
+					data: {
+						cwd: "D:\\other",
+						isStreaming: false,
+						messageCount: 1,
+						piSessionId: "pi-b",
+						sessionFile: "C:/sessions/b.jsonl",
+						sessionId: "s2",
+					},
+				};
+			}
+			if (command.type === "get_messages") return { data: { messages: [] } };
+			return {
+				data: {
+					cwd: "D:\\other",
+					isStreaming: false,
+					messageCount: 1,
+					sessionFile: "C:/sessions/b.jsonl",
+					sessionId: "pi-b",
+				},
+			};
+		});
+		usePiStore.setState({
+			activeHandleId: "s1",
+			handles: { "C:/sessions/a.jsonl": "s1" },
+			multiSession: true,
+			sessionCwd: "D:/work",
+			sessionFile: "C:/sessions/a.jsonl",
+		});
+		await usePiStore.getState().showSession("C:/sessions/b.jsonl");
+
+		// projectHandle has no slice for s2 and used to blank this, after which send()
+		// refused with 请先选择工作区 on a session the user explicitly opened.
+		expect(usePiStore.getState().sessionCwd).toBe("D:\\other");
+	});
+
+	it("adopts the cwd get_state reports when open_session did not name one", async () => {
+		stubPi((command) => {
+			if (command.type === "open_session") {
+				return {
+					data: {
+						isStreaming: false,
+						messageCount: 0,
+						piSessionId: "pi-b",
+						sessionFile: "C:/sessions/b.jsonl",
+						sessionId: "s2",
+					},
+				};
+			}
+			if (command.type === "get_messages") return { data: { messages: [] } };
+			if (command.type === "get_state") {
+				return {
+					data: {
+						cwd: "D:\\other",
+						isStreaming: false,
+						messageCount: 0,
+						sessionFile: "C:/sessions/b.jsonl",
+						sessionId: "pi-b",
+					},
+				};
+			}
+			return { data: {} };
+		});
+		usePiStore.setState({
+			activeHandleId: "s1",
+			handles: { "C:/sessions/a.jsonl": "s1" },
+			multiSession: true,
+			sessionCwd: "D:/work",
+			sessionFile: "C:/sessions/a.jsonl",
+		});
+		await usePiStore.getState().showSession("C:/sessions/b.jsonl");
+
+		expect(usePiStore.getState().sessionCwd).toBe("D:\\other");
 	});
 
 	it("re-reads a session whose slice never held a transcript", async () => {

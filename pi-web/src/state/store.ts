@@ -22,7 +22,6 @@ import type {
 	SessionInfo,
 	SessionTreeNode,
 	SlashCommand,
-	TodoItem,
 } from "./types";
 
 let messageCounter = 0;
@@ -43,7 +42,6 @@ const assistantMessageIds = new Map<string, string>();
  * that turn is stamped with the elapsed time. A restored session therefore has no duration.
  */
 const turnStartedAt = new Map<string, number>();
-let todoLoadGeneration = 0;
 let fileLoadGeneration = 0;
 let commandLoadGeneration = 0;
 let statsLoadGeneration = 0;
@@ -104,11 +102,6 @@ function isUnboundNewSession(
 
 export function hasWorkspaceForPrompt(state: PiState): boolean {
 	return !isUnboundNewSession(state) && Boolean(state.sessionCwd || state.sessionProject);
-}
-
-function clearVisibleTodos(): void {
-	todoLoadGeneration += 1;
-	usePiStore.setState({ todos: [], todosCwd: undefined });
 }
 
 /**
@@ -174,6 +167,7 @@ function toImageContent(images?: ImageAttachment[]): Array<{ data: string; mimeT
 
 interface SessionSnapshot {
 	autoCompactionEnabled?: boolean;
+	cwd?: string;
 	isCompacting?: boolean;
 	messageCount?: number;
 	model?: { id?: string };
@@ -439,6 +433,9 @@ function snapshotFields(snapshot: SessionSnapshot | undefined): Partial<PiState>
 		isCompacting: snapshot?.isCompacting ?? false,
 		messageCount: snapshot?.messageCount ?? 0,
 		model: snapshot?.model?.id,
+		// A snapshot without a cwd (partial data) must not erase the folder the session
+		// was opened with — that folder is what lets the composer send at all.
+		...(snapshot?.cwd !== undefined ? { sessionCwd: snapshot.cwd } : {}),
 		sessionFile: snapshot?.sessionFile,
 		sessionId: snapshot?.sessionId,
 		sessionLoading: false,
@@ -541,8 +538,6 @@ function projectHandle(state: PiStore, handleId: string): Partial<PiStore> {
 			sessionCwd: undefined,
 			sessionProject: undefined,
 			status: "starting",
-			todos: [],
-			todosCwd: undefined,
 			files: [],
 			filesRoot: undefined,
 		};
@@ -564,8 +559,6 @@ function projectHandle(state: PiStore, handleId: string): Partial<PiStore> {
 		sessionProject: undefined,
 		sessionLoading: false,
 		sessionName: slice.sessionName,
-		todos: [],
-		todosCwd: undefined,
 		files: [],
 		filesRoot: undefined,
 		// The previous session's stats describe another context window; the switch re-reads them.
@@ -1141,8 +1134,6 @@ export interface PiStore extends PiState {
 	loadSessions: () => Promise<void>;
 	loadMessages: (messages: unknown[]) => void;
 	loadSessionStats: () => Promise<void>;
-	/** Re-read the visible project's `.pi/todo.json`, which is where the todo tool keeps its list. */
-	loadTodos: () => Promise<void>;
 	loadTree: () => Promise<void>;
 	newSession: (parentSession?: string) => Promise<void>;
 	/** Start a new session in a project folder; without one it lands in the current workspace. */
@@ -1223,8 +1214,6 @@ const initialState: PiState = {
 	steeringMode: "one-at-a-time",
 	followUpMode: "one-at-a-time",
 	status: "starting",
-	todos: [],
-	todosCwd: undefined,
 };
 
 export const usePiStore = create<PiStore>((set, get) => ({
@@ -1286,7 +1275,6 @@ export const usePiStore = create<PiStore>((set, get) => ({
 	// Single-session fallback only: the optimistic move keeps the previous session off screen
 	// while pi aborts the running turn and switches. Multi-session switches use showSession.
 	beginSessionSwitch: (session) => {
-		clearVisibleTodos();
 		const oldHandleId = get().activeHandleId;
 		assistantMessageIds.delete(oldHandleId ?? "");
 		turnStartedAt.delete(oldHandleId ?? "");
@@ -1302,8 +1290,6 @@ export const usePiStore = create<PiStore>((set, get) => ({
 			sessionLoading: true,
 			sessionName: session.name,
 			status: "starting",
-			todos: [],
-			todosCwd: undefined,
 		});
 	},
 	// Drop a handle the renderer must not address anymore and forget everything about it. The
@@ -1531,9 +1517,6 @@ export const usePiStore = create<PiStore>((set, get) => ({
 				}
 				if (method === "setWidget") {
 					const key = typeof raw.widgetKey === "string" ? raw.widgetKey : "widget";
-					// The todo extension pings its widget key whenever the list changes, and in RPC
-					// mode the widget carries no data — the key is the signal to re-read the file.
-					if (key === "todo") void get().loadTodos();
 					const next = { ...state.extensionUiWidgets };
 					if (Array.isArray(raw.widgetLines)) {
 						next[key] = {
@@ -1730,8 +1713,8 @@ export const usePiStore = create<PiStore>((set, get) => ({
 			if (info?.cwd) set({ sessionCwd: info.cwd });
 		}
 		// Single-session cwd is only known after the runtime info call above; load project-scoped
-		// data afterwards so a stale/undefined cwd cannot select the wrong todo file.
-		await Promise.all([get().loadTodos().catch(() => {}), get().loadFiles().catch(() => {})]);
+		// data afterwards so a stale/undefined cwd cannot select the wrong listing.
+		await get().loadFiles().catch(() => {});
 		const models = await rpc<{ models?: ModelInfo[] }>({ type: "get_available_models" });
 		if (Array.isArray(models?.models)) set({ models: models.models });
 		const levels = await rpc<{ levels?: string[] }>({ type: "get_available_thinking_levels" });
@@ -1850,34 +1833,6 @@ export const usePiStore = create<PiStore>((set, get) => ({
 		const stats = await rpc<SessionStats>({ type: "get_session_stats" });
 		if (generation === statsLoadGeneration && get().activeHandleId === handleId) set({ sessionStats: stats });
 	},
-	loadTodos: async () => {
-		const generation = ++todoLoadGeneration;
-		const current = get();
-		const cwd = current.sessionCwd;
-		const handleId = current.activeHandleId;
-		if (!cwd || isUnboundNewSession(current)) {
-			set({ todos: [], todosCwd: undefined });
-			return;
-		}
-		// The todo extension keeps its list in the project, not in the session, so the renderer
-		// reads the file itself: pi's RPC bridges widgets as rendered components, which carry no
-		// data a client could re-render.
-		const path = `${cwd.replace(/[\\/]+$/, "")}/.pi/todo.json`;
-		try {
-			const file = (await window.pi.readFile(path)) as { text?: string; type?: string } | undefined;
-			const text = file?.type === "text" && typeof file.text === "string" ? file.text : "";
-			const parsed = JSON.parse(text) as { items?: TodoItem[] } | undefined;
-			const latest = get();
-			if (generation !== todoLoadGeneration || latest.activeHandleId !== handleId || latest.sessionCwd !== cwd) return;
-			set({ todos: Array.isArray(parsed?.items) ? parsed.items : [], todosCwd: cwd });
-		} catch {
-			// No todo file in this project yet; that is an empty list, not a failure.
-			const latest = get();
-			if (generation === todoLoadGeneration && latest.activeHandleId === handleId && latest.sessionCwd === cwd) {
-				set({ todos: [], todosCwd: cwd });
-			}
-		}
-	},
 	loadTree: async () => {
 		const tree = await rpc<{ tree?: SessionTreeNode[] }>({ type: "get_tree" });
 		set({ sessionTree: Array.isArray(tree?.tree) ? tree.tree : [] });
@@ -1887,12 +1842,8 @@ export const usePiStore = create<PiStore>((set, get) => ({
 		// project chip stays bound. Only a session with a transcript proves the folder was chosen:
 		// the untouched first session of a run still shows 选择项目 until the user picks one.
 		const inheritedProject = get().sessionProject ?? (get().messageCount > 0 ? get().sessionCwd : undefined);
-		clearVisibleTodos();
 		const result = await rpc<{ cancelled?: boolean }>({ parentSession, type: "new_session" });
-		if (result?.cancelled) {
-			await get().loadTodos().catch(() => {});
-			return;
-		}
+		if (result?.cancelled) return;
 		// The handle survives with a new pi session behind it; refreshSession re-keys the path map
 		// from the get_state it already runs.
 		await get().refreshSession();
@@ -1958,7 +1909,6 @@ export const usePiStore = create<PiStore>((set, get) => ({
 		// Remembered before the restart: a restarted process comes up on a fresh session, and in
 		// multi-session mode the one the user was looking at can be opened again right away.
 		const previousSessionFile = get().sessionFile;
-		clearVisibleTodos();
 		set({ connectionError: undefined, error: undefined, status: "starting" });
 		try {
 			await window.pi.restart();
@@ -2036,11 +1986,7 @@ export const usePiStore = create<PiStore>((set, get) => ({
 		// The task list follows the project, and a switch can land in another one. The file panel's
 		// listing does too, and so does the slash-command list: it is built from the session's
 		// own extensions.
-		await Promise.all([
-			get().loadTodos().catch(() => {}),
-			get().loadFiles().catch(() => {}),
-			get().loadCommands().catch(() => {}),
-		]);
+		await Promise.all([get().loadFiles().catch(() => {}), get().loadCommands().catch(() => {})]);
 	},
 	// A session created moments ago is missing from the sidebar until the list is re-read, and
 	// multi-session switches no longer run the session listing that used to refresh it. Only
@@ -2059,6 +2005,7 @@ export const usePiStore = create<PiStore>((set, get) => ({
 		}
 		const previousHandleId = get().activeHandleId;
 		let handleId = get().handles[sessionMapKey(sessionPath)];
+		let openedCwd: string | undefined;
 		if (!handleId) {
 			const previousStatus = get().status;
 			set({ sessionLoading: true, status: "starting" });
@@ -2077,9 +2024,9 @@ export const usePiStore = create<PiStore>((set, get) => ({
 				return;
 			}
 			handleId = opened.sessionId;
+			openedCwd = opened.cwd;
 			set((state) => ({
 				handles: registerHandle(state.handles, opened),
-				sessionCwd: opened?.cwd ?? state.sessionCwd,
 			}));
 		}
 		// Take the slice as it is now: projectHandle below overwrites it with the stashed state.
@@ -2088,6 +2035,9 @@ export const usePiStore = create<PiStore>((set, get) => ({
 			...projectHandle(state, handleId),
 			// Most-recently-used first: the pool cap evicts from the other end.
 			handleOrder: [handleId, ...state.handleOrder.filter((id) => id !== handleId)],
+			// projectHandle clears sessionCwd for a handle it has no slice for; the open reply
+			// names the session's folder and must land after the spread or it is lost.
+			...(openedCwd !== undefined ? { sessionCwd: openedCwd } : {}),
 		}));
 		// A newer click can take over while open_session is in flight; that one owns the screen.
 		if (get().activeHandleId !== handleId) return;
@@ -2102,8 +2052,7 @@ export const usePiStore = create<PiStore>((set, get) => ({
 			await Promise.all([
 				get().loadSessionStats().catch(() => {}),
 				get().loadForkMessages().catch(() => {}),
-				// A switch can land in another project, which has its own task list and file tree.
-				get().loadTodos().catch(() => {}),
+				// A switch can land in another project, which has its own file tree.
 				get().loadFiles().catch(() => {}),
 			]);
 		}
@@ -2112,7 +2061,6 @@ export const usePiStore = create<PiStore>((set, get) => ({
 	reset: () => {
 		assistantMessageIds.clear();
 		turnStartedAt.clear();
-		todoLoadGeneration += 1;
 		fileLoadGeneration += 1;
 		commandLoadGeneration += 1;
 		statsLoadGeneration += 1;
@@ -2250,13 +2198,11 @@ export const usePiStore = create<PiStore>((set, get) => ({
 		await rpc({ images: toImageContent(images), message: text, type: "steer" });
 	},
 	switchSession: async (sessionPath) => {
-		clearVisibleTodos();
 		let result: { cancelled?: boolean } | undefined;
 		try {
 			result = await rpc<{ cancelled?: boolean }>({ sessionPath, type: "switch_session" });
 		} catch (error) {
 			await Promise.all([
-				get().loadTodos().catch(() => {}),
 				get().loadFiles().catch(() => {}),
 				get().loadSessionStats().catch(() => {}),
 				get().loadForkMessages().catch(() => {}),
@@ -2267,7 +2213,6 @@ export const usePiStore = create<PiStore>((set, get) => ({
 			// The optimistic switch did not happen, so put the real session back on screen.
 			await get().refreshSession();
 			await Promise.all([
-				get().loadTodos().catch(() => {}),
 				get().loadFiles().catch(() => {}),
 				get().loadSessionStats().catch(() => {}),
 				get().loadForkMessages().catch(() => {}),
@@ -2277,7 +2222,6 @@ export const usePiStore = create<PiStore>((set, get) => ({
 		await get().refreshSession();
 		await Promise.all([
 			get().loadSessions(),
-			get().loadTodos().catch(() => {}),
 			get().loadFiles().catch(() => {}),
 			get().loadSessionStats().catch(() => {}),
 			get().loadForkMessages().catch(() => {}),

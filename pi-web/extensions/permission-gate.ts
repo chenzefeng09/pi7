@@ -145,12 +145,16 @@ export default function permissionGate(pi: ExtensionAPI): void {
 				ctx.ui.notify(`未知权限模式「${mode}」，可选 read-only / workspace-write / full`, "warning");
 				return;
 			}
-			// The app re-sends the remembered mode whenever the session changes, so an unchanged
-			// mode is not worth a second notice.
+			// The app pushes the remembered mode on every session switch, so a session seeing a
+			// mode for the first time is being initialized, not switched — the composer chip
+			// already shows it. Only a change on a session that had one is worth a notice.
 			const key = keyOf(ctx);
-			if (modes.get(key) === mode) return;
+			const previous = modes.get(key);
+			if (previous === mode) return;
 			modes.set(key, mode);
-			ctx.ui.notify(`权限模式已切换为「${MODE_LABELS[mode]}」`, "info");
+			if (previous !== undefined) {
+				ctx.ui.notify(`权限模式已切换为「${MODE_LABELS[mode]}」`, "info");
+			}
 		},
 	});
 
