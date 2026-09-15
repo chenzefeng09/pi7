@@ -30,7 +30,7 @@
 		"appId": "com.chenzefeng.piweb",
 		"productName": "π7",
 		"executableName": "pi7",
-		"artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+		"artifactName": "pi7-${version}-${os}-${arch}.${ext}",
 		"files": [
 			"build/icon.png",
 			"dist/electron/**/*",
@@ -43,10 +43,14 @@
 					"**/*",
 					"!config/agent/auth.json",
 					"!config/agent/models-store.json",
+					"!config/agent/trust.json",
+					"!config/agent/secrets.json",
 					"!config/agent/sessions/**",
+					"!config/agent/archive/**",
 					"!config/agent/logs/**",
 					"!config/agent/**/*.log",
-					"!config/agent/extensions/*-test.ts"
+					"!config/agent/extensions/*-test.ts",
+					"!app/node_modules/.package-lock.json"
 				],
 				"from": "resources/pi-win7",
 				"to": "pi-win7"
