@@ -3,7 +3,8 @@
 	"private": true,
 	"version": "0.1.0",
 	"description": "Local desktop web UI for pi",
-	"author": "chenzefeng",
+	"author": "chenzefeng <chenzefeng09@users.noreply.github.com>",
+	"homepage": "https://github.com/chenzefeng09/pi7",
 	"license": "MIT",
 	"type": "module",
 	"main": "dist/electron/main.cjs",
@@ -31,6 +32,7 @@
 		"executableName": "pi7",
 		"artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
 		"files": [
+			"build/icon.png",
 			"dist/electron/**/*",
 			"dist/renderer/**/*",
 			"package.json"
