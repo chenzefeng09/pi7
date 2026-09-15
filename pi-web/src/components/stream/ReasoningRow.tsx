@@ -2,6 +2,7 @@ import { Lightbulb } from "lucide-react";
 import { memo, useState } from "react";
 import type { ThinkingBlock } from "../../state/types";
 import { DisclosureRow, RowSummary } from "./rows";
+import { t } from "../../i18n";
 
 function firstLine(text: string): string {
 	const newline = text.indexOf("\n");
@@ -43,7 +44,7 @@ export const ReasoningRow = memo(function ReasoningRow({ block }: { block: Think
 					<RowSummary text={summary} />
 				)
 			}
-			title="思考"
+			title={t("思考")}
 		>
 			<div className="whitespace-pre-wrap break-words py-1 pl-[22px] text-[13px] leading-5 text-ink-subtle">
 				{block.text}

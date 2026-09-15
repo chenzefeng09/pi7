@@ -13,6 +13,7 @@ import {
 	providerPatchOf,
 } from "./ProviderEditor";
 import { SettingsPill, SettingsRow, SettingsSelect } from "./SettingsControls";
+import { t } from "../i18n";
 
 /** One custom provider as the main process reports it — never with the key itself. */
 interface ProviderView {
@@ -42,20 +43,20 @@ interface ModelConfigView {
 }
 
 const CREDENTIAL_LABEL: Record<ProviderView["credential"], string> = {
-	command: "命令",
-	env: "环境变量",
-	literal: "密钥",
-	none: "未配置",
+	command: t("命令"),
+	env: t("环境变量"),
+	literal: t("密钥"),
+	none: t("未配置"),
 };
 
 const THINKING_LABEL: Record<string, string> = {
-	high: "高",
-	low: "低",
-	max: "最高",
-	medium: "中",
-	minimal: "最低",
-	off: "关闭",
-	xhigh: "极高",
+	high: t("高"),
+	low: t("低"),
+	max: t("最高"),
+	medium: t("中"),
+	minimal: t("最低"),
+	off: t("关闭"),
+	xhigh: t("极高"),
 };
 
 /** pi's order, from no thinking to the most (`packages/ai/src/models.ts`). */
@@ -111,26 +112,29 @@ export function ModelsSection() {
 
 	useEffect(() => {
 		if (!bridgeReady) {
-			setFailure("模型设置需要重启 π7 后可用。");
+			setFailure(t("模型设置需要重启 π7 后可用。"));
 			return;
 		}
 		void window.pi
 			.readModelConfig()
 			.then((value) => setConfig(value as ModelConfigView))
 			.catch((error: unknown) =>
-				setFailure(error instanceof Error ? error.message : "无法读取模型配置，重启 π7 后再试。"),
+				setFailure(error instanceof Error ? error.message : t("无法读取模型配置，重启 π7 后再试。")),
 			);
 	}, [bridgeReady]);
 
-	const save = async (patch: Record<string, unknown>, message = "已保存，重启运行时后生效") => {
+	const save = async (patch: Record<string, unknown>, message = t("已保存，重启运行时后生效")) => {
 		if (!bridgeReady) {
-			setNotice("模型设置需要重启 π7 后可用。");
+			setNotice(t("模型设置需要重启 π7 后可用。"));
 			return;
 		}
 		setBusy(true);
 		try {
 			setConfig((await window.pi.writeModelConfig(patch)) as ModelConfigView);
 			setNotice(message);
+			// pi may or may not pick the file up before a restart; asking again keeps the
+			// no-model banner and the composer gate honest either way.
+			void usePiStore.getState().loadModels();
 		} catch (error) {
 			setNotice(error instanceof Error ? error.message : String(error));
 		} finally {
@@ -144,7 +148,7 @@ export function ModelsSection() {
 			typeof window.pi.exportModelConfig !== "function" ||
 			typeof window.pi.importModelConfig !== "function"
 		) {
-			setNotice("导入导出需要重启 π7 后可用。");
+			setNotice(t("导入导出需要重启 π7 后可用。"));
 			return;
 		}
 		setBusy(true);
@@ -155,9 +159,13 @@ export function ModelsSection() {
 					| undefined;
 				if (result?.canceled) return;
 				setNotice(
-					`已导出 ${String(result?.providers ?? 0)} 个供应商到 ${result?.path ?? ""}${
-						result?.redactedKeys ? `；${String(result.redactedKeys)} 个明文密钥未写入，需在新环境重新填写` : ""
-					}`,
+					t("已导出 {count} 个供应商到 {path}{suffix}", {
+						count: String(result?.providers ?? 0),
+						path: result?.path ?? "",
+						suffix: result?.redactedKeys
+							? t("；{count} 个明文密钥未写入，需在新环境重新填写", { count: String(result.redactedKeys) })
+							: "",
+					}),
 				);
 				return;
 			}
@@ -174,16 +182,18 @@ export function ModelsSection() {
 				| undefined;
 			if (result?.canceled) return;
 			if (result?.error) {
-				setNotice(`导入失败：${result.error}`);
+				setNotice(t("导入失败：{error}", { "error": result.error }));
 				return;
 			}
 			setConfig((await window.pi.readModelConfig()) as ModelConfigView);
 			setNotice(
-				`已从 ${result?.path ?? ""} 导入：新增 ${String(result?.added?.length ?? 0)} 个、覆盖 ${String(
-					result?.replaced?.length ?? 0,
-				)} 个供应商${result?.defaultsApplied ? "，默认模型已更新" : ""}${
-					result?.keptKeys?.length ? "；文件中没有的密钥沿用了原有值" : ""
-				}`,
+				t("已从 {path} 导入：新增 {added} 个、覆盖 {replaced} 个供应商{suffix}{keysSuffix}", {
+					added: String(result?.added?.length ?? 0),
+					keysSuffix: result?.keptKeys?.length ? t("；文件中没有的密钥沿用了原有值") : "",
+					path: result?.path ?? "",
+					replaced: String(result?.replaced?.length ?? 0),
+					suffix: result?.defaultsApplied ? t("，默认模型已更新") : "",
+				}),
 			);
 		} catch (error) {
 			setNotice(error instanceof Error ? error.message : String(error));
@@ -192,7 +202,7 @@ export function ModelsSection() {
 		}
 	};
 
-	if (!config) return <div className="py-4 text-[12px] text-[#98a2b3]">{failure || "读取模型配置…"}</div>;
+	if (!config) return <div className="py-4 text-[12px] text-[#98a2b3]">{failure || t("读取模型配置…")}</div>;
 
 	const selected = models.findIndex(
 		(model) => model.id === config.defaultModel && model.provider === config.defaultProvider,
@@ -226,14 +236,14 @@ export function ModelsSection() {
 		<div className="flex flex-col">
 			<SettingsRow
 				description={
-					config.defaultProvider ? `${config.defaultProvider} / ${config.defaultModel}` : "新会话使用 pi 自己的默认值"
+					config.defaultProvider ? `${config.defaultProvider} / ${config.defaultModel}` : t("新会话使用 pi 自己的默认值")
 				}
-				title="默认模型"
+				title={t("默认模型")}
 			>
 				<div className="relative">
-					<SettingsPill disabled={busy} onClick={() => setPickerOpen((value) => !value)} title="选择默认模型">
+					<SettingsPill disabled={busy} onClick={() => setPickerOpen((value) => !value)} title={t("选择默认模型")}>
 						<span className="max-w-[240px] truncate">
-							{selected >= 0 ? (models[selected].name ?? models[selected].id) : (config.defaultModel ?? "未设置")}
+							{selected >= 0 ? (models[selected].name ?? models[selected].id) : (config.defaultModel ?? t("未设置"))}
 						</span>
 						<ChevronDown className="text-[#98a2b3]" size={14} />
 					</SettingsPill>
@@ -244,7 +254,7 @@ export function ModelsSection() {
 									autoFocus
 									className="h-8 w-full rounded-lg px-2 text-[13px] outline-none placeholder:text-[#98a2b3]"
 									onChange={(event) => setModelQuery(event.target.value)}
-									placeholder="搜索模型或供应商"
+									placeholder={t("搜索模型或供应商")}
 									value={modelQuery}
 								/>
 							</div>
@@ -255,7 +265,7 @@ export function ModelsSection() {
 										key={`${model.provider}/${model.id}`}
 										onClick={() => {
 											setPickerOpen(false);
-											void save({ defaultModel: model.id, defaultProvider: model.provider }, "已保存默认模型");
+											void save({ defaultModel: model.id, defaultProvider: model.provider }, t("已保存默认模型"));
 										}}
 										type="button"
 									>
@@ -266,7 +276,7 @@ export function ModelsSection() {
 									</button>
 								))}
 								{filteredModels.length === 0 ? (
-									<div className="px-2 py-4 text-center text-[12px] text-[#98a2b3]">没有匹配的模型</div>
+									<div className="px-2 py-4 text-center text-[12px] text-[#98a2b3]">{t("没有匹配的模型")}</div>
 								) : null}
 							</div>
 							<div className="flex items-center justify-between border-t border-black/[0.06] px-2 py-1.5">
@@ -274,14 +284,13 @@ export function ModelsSection() {
 									className="text-[11px] text-[#98a2b3] hover:text-[#4b5563]"
 									onClick={() => {
 										setPickerOpen(false);
-										void save({ defaultModel: "", defaultProvider: "" }, "已清除默认模型");
+										void save({ defaultModel: "", defaultProvider: "" }, t("已清除默认模型"));
 									}}
 									type="button"
 								>
-									清除默认模型
-								</button>
+									{t("清除默认模型")}</button>
 								<span className="text-[11px] text-[#c0c6cd]">
-									{query ? `${filteredModels.length} 个匹配` : `${models.length} 个可选`}
+									{query ? t("{length} 个匹配", { "length": filteredModels.length }) : t("{length} 个可选", { "length": models.length })}
 								</span>
 							</div>
 						</div>
@@ -292,17 +301,17 @@ export function ModelsSection() {
 			<SettingsRow
 				description={
 					effectiveThinkingLevel === requestedThinkingLevel
-						? `新会话默认使用的推理强度；可选范围由默认模型决定（${thinkingOptions.map((level) => THINKING_LABEL[level] ?? level).join(" / ")}）`
-						: `默认模型不支持「${THINKING_LABEL[requestedThinkingLevel] ?? requestedThinkingLevel}」，实际使用「${THINKING_LABEL[effectiveThinkingLevel] ?? effectiveThinkingLevel}」；可选范围（${thinkingOptions.map((level) => THINKING_LABEL[level] ?? level).join(" / ")}）`
+						? t("新会话默认使用的推理强度；可选范围由默认模型决定（{arg}）", { "arg": thinkingOptions.map((level) => THINKING_LABEL[level] ?? level).join(" / ") })
+						: t("默认模型不支持「{arg}」，实际使用「{arg2}」；可选范围（{arg3}）", { "arg": THINKING_LABEL[requestedThinkingLevel] ?? requestedThinkingLevel, "arg2": THINKING_LABEL[effectiveThinkingLevel] ?? effectiveThinkingLevel, "arg3": thinkingOptions.map((level) => THINKING_LABEL[level] ?? level).join(" / ") })
 				}
-				title="默认推理强度"
+				title={t("默认推理强度")}
 			>
 				<SettingsSelect
 					disabled={busy}
 					minWidth={72}
-					onChange={(level) => void save({ defaultThinkingLevel: level }, "已保存推理强度")}
+					onChange={(level) => void save({ defaultThinkingLevel: level }, t("已保存推理强度"))}
 					options={thinkingOptions.map((level) => ({ label: THINKING_LABEL[level] ?? level, value: level }))}
-					title="选择默认推理强度"
+					title={t("选择默认推理强度")}
 					value={effectiveThinkingLevel}
 				/>
 			</SettingsRow>
@@ -310,29 +319,26 @@ export function ModelsSection() {
 			<div className="flex flex-col gap-3 py-4">
 				<div className="flex items-center gap-3">
 					<div className="flex min-w-0 flex-1 flex-col gap-1">
-						<div className="text-[14px] leading-[22px] text-[#1f2937]">自定义供应商</div>
+						<div className="text-[14px] leading-[22px] text-[#1f2937]">{t("自定义供应商")}</div>
 						<div className="text-[12px] leading-[18px] text-[#98a2b3]">
-							写在配置目录的 <span className="font-mono">models.json</span>；pi 内置目录里的供应商无需在这里配置。
-						</div>
+							{t("写在配置目录的")}<span className="font-mono">models.json</span>{t("；pi 内置目录里的供应商无需在这里配置。")}</div>
 					</div>
 					<button
 						className="flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] text-[#667085] transition-colors hover:bg-black/[0.05] hover:text-[#1f2937]"
 						onClick={() => void transfer("export")}
-						title="把所有自定义供应商与默认模型导出成一个 JSON 文件（不含明文密钥）"
+						title={t("把所有自定义供应商与默认模型导出成一个 JSON 文件（不含明文密钥）")}
 						type="button"
 					>
 						<Upload size={14} />
-						导出
-					</button>
+						{t("导出")}</button>
 					<button
 						className="flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] text-[#667085] transition-colors hover:bg-black/[0.05] hover:text-[#1f2937]"
 						onClick={() => void transfer("import")}
-						title="从导出的 JSON 文件合并供应商与默认模型；已存在的同名供应商会被覆盖"
+						title={t("从导出的 JSON 文件合并供应商与默认模型；已存在的同名供应商会被覆盖")}
 						type="button"
 					>
 						<Download size={14} />
-						导入
-					</button>
+						{t("导入")}</button>
 					{/* The form is a place you go to, not a permanent part of the page: the + opens it. */}
 					<button
 						className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#6b7280] transition-colors hover:bg-black/[0.05]"
@@ -340,7 +346,7 @@ export function ModelsSection() {
 							setEditingProvider(undefined);
 							setProviderDraft(emptyProviderDraft());
 						}}
-						title="新增供应商"
+						title={t("新增供应商")}
 						type="button"
 					>
 						<Plus size={16} />
@@ -357,9 +363,7 @@ export function ModelsSection() {
 								className={`h-1.5 w-1.5 shrink-0 rounded-full ${
 									provider.credential === "none" ? "bg-[#f04438]" : "bg-[#22c55e]"
 								}`}
-								title={`凭证：${CREDENTIAL_LABEL[provider.credential]}${
-									provider.credentialHint ? ` ${provider.credentialHint}` : ""
-								}`}
+								title={t("凭证：{arg}{arg2}", { "arg": CREDENTIAL_LABEL[provider.credential], "arg2": provider.credentialHint ? ` ${provider.credentialHint}` : "" })}
 							/>
 							<span className="min-w-0 truncate text-[14px] text-[#1f2937]">
 								{provider.name ?? provider.id}
@@ -368,7 +372,7 @@ export function ModelsSection() {
 								{provider.id}
 							</span>
 							<span className="min-w-0 flex-1 truncate text-[12px] text-[#98a2b3]">
-								{provider.models.length} 个模型 · {provider.api ?? "api 未设置"}
+								{provider.models.length} {t("个模型 ·")}{provider.api ?? t("api 未设置")}
 							</span>
 							<button
 								className="shrink-0 rounded-full px-2 py-0.5 text-[11px] text-[#667085] hover:bg-black/[0.04] hover:text-[#1f2937]"
@@ -376,30 +380,29 @@ export function ModelsSection() {
 									setEditingProvider(provider.id);
 									setProviderDraft(draftOfProvider(provider));
 								}}
-								title="编辑该供应商及其模型"
+								title={t("编辑该供应商及其模型")}
 								type="button"
 							>
-								编辑
-							</button>
+								{t("编辑")}</button>
 							<button
 								className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[#b6bcc4] hover:bg-black/[0.04] hover:text-[#d92d20]"
-								onClick={() => void save({ providers: [{ id: provider.id, removed: true }] }, "已删除供应商")}
-								title="删除该供应商"
+								onClick={() => void save({ providers: [{ id: provider.id, removed: true }] }, t("已删除供应商"))}
+								title={t("删除该供应商")}
 								type="button"
 							>
 								<Trash2 size={12} />
 							</button>
 						</div>
 						<div className="break-all font-mono text-[11px] text-[#98a2b3]">
-							{provider.baseUrl ?? "未设置 baseUrl"}
+							{provider.baseUrl ?? t("未设置 baseUrl")}
 						</div>
 						{provider.models.length > 0 ? (
 							<div className="text-[12px] text-[#667085]">
 								{provider.models
 									.slice(0, 4)
 									.map((model) => model.id)
-									.join("、")}
-								{provider.models.length > 4 ? ` 等 ${provider.models.length} 个` : ""}
+									.join(t("、"))}
+								{provider.models.length > 4 ? t(" 等 {length} 个", { "length": provider.models.length }) : ""}
 							</div>
 						) : null}
 					</div>

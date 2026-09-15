@@ -2,6 +2,7 @@ import { memo, type ReactNode, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CopyButton, FoldToggle, RowCard } from "./rows";
+import { t } from "../../i18n";
 
 /** Rows hidden by a capped card body before the user expands it (dsh CHAT_*_MAX_LINES = 8). */
 export const CARD_MAX_LINES = 8;
@@ -71,13 +72,13 @@ export const TerminalCard = memo(function TerminalCard({
 						</div>
 					))}
 				</div>
-				{failed ? <span className="flex-none text-danger">退出码 {exitCode}</span> : null}
+				{failed ? <span className="flex-none text-danger">{t("退出码")}{exitCode}</span> : null}
 				{failure ? <span className="flex-none text-danger">{failure}</span> : null}
 				{running ? null : <CopyButton text={output} />}
 			</div>
 			<div className="border-t-[0.5px] border-black/10">
 				{outputLines.length === 0 ? (
-					<div className="px-3.5 py-3 text-ink-subtle">无输出</div>
+					<div className="px-3.5 py-3 text-ink-subtle">{t("无输出")}</div>
 				) : (
 					<div className="max-h-[224px] overflow-auto py-3">
 						<div className="w-max min-w-full px-3.5 font-mono">
@@ -119,7 +120,7 @@ export const DiffCard = memo(function DiffCard({ files, rows }: { files: number;
 					<DiffLine key={`t-${index}-${row.text}`} row={row} />
 				))}
 				<div className="mt-1 whitespace-pre text-ink-subtle">
-					{`└ +${added} -${removed} · ${files} 个文件`}
+					{t("└ +{added} -{removed} · {files} 个文件", { "added": added, "removed": removed, "files": files })}
 				</div>
 			</div>
 		</RowCard>
@@ -153,7 +154,7 @@ export const ReadCard = memo(function ReadCard({
 	const [expanded, setExpanded] = useState(false);
 	const { head, hidden, tail } = capRows(lines, expanded);
 	const lastShown = startLine + lines.length - 1;
-	const note = totalLines !== undefined && totalLines > lastShown ? `显示 ${lines.length} / ${totalLines} 行` : undefined;
+	const note = totalLines !== undefined && totalLines > lastShown ? t("显示 {length} / {totalLines} 行", { "length": lines.length, "totalLines": totalLines }) : undefined;
 	return (
 		<RowCard>
 			<CardHeader trailing={<CopyButton text={lines.join("\n")} />}>
@@ -210,7 +211,7 @@ export const SearchCard = memo(function SearchCard({
 		<RowCard>
 			<CardHeader trailing={<CopyButton text={copyText} />}>
 				<span className="truncate text-[13px] leading-5 text-ink-muted">
-					{`${matches} 处匹配 · ${files} 个文件`}
+					{t("{matches} 处匹配 · {files} 个文件", { "matches": matches, "files": files })}
 				</span>
 			</CardHeader>
 			<div className="overflow-x-auto py-3 pl-3.5 pr-3.5 font-mono">
@@ -245,7 +246,7 @@ export const PathsCard = memo(function PathsCard({ paths }: { paths: string[] })
 	return (
 		<RowCard>
 			<CardHeader trailing={<CopyButton text={paths.join("\n")} />}>
-				<span className="text-[13px] leading-5 text-ink-muted">{`${paths.length} 个路径`}</span>
+				<span className="text-[13px] leading-5 text-ink-muted">{t("{length} 个路径", { "length": paths.length })}</span>
 			</CardHeader>
 			<div className="overflow-x-auto py-3 pl-3.5 pr-3.5 font-mono">
 				{head.map((path, index) => (
@@ -275,7 +276,7 @@ export const WebCard = memo(function WebCard({
 	if (!answer && sources.length === 0) {
 		return (
 			<RowCard>
-				<div className="px-3.5 py-3 text-[13px] text-ink-muted">未找到结果</div>
+				<div className="px-3.5 py-3 text-[13px] text-ink-muted">{t("未找到结果")}</div>
 			</RowCard>
 		);
 	}
@@ -364,14 +365,14 @@ export const IoCard = memo(function IoCard({
 		<RowCard>
 			{input ? (
 				<div className="grid max-h-[150px] grid-cols-[max-content_1fr] items-baseline gap-x-3.5 overflow-y-auto px-4 py-3 font-mono">
-					<span className="sticky top-0 self-start text-ink-caption">输入</span>
+					<span className="sticky top-0 self-start text-ink-caption">{t("输入")}</span>
 					<span className="min-w-0 whitespace-pre-wrap break-words text-ink-muted">{input}</span>
 				</div>
 			) : null}
 			{input && output ? <div className="h-[0.5px] bg-black/10" /> : null}
 			{output ? (
 				<div className="grid max-h-[150px] grid-cols-[max-content_1fr] items-baseline gap-x-3.5 overflow-y-auto px-4 py-3 font-mono">
-					<span className="sticky top-0 self-start text-ink-caption">输出</span>
+					<span className="sticky top-0 self-start text-ink-caption">{t("输出")}</span>
 					<span
 						className={`min-w-0 whitespace-pre-wrap break-words ${error ? "text-danger" : "text-ink-muted"}`}
 					>
@@ -419,9 +420,9 @@ export const SubagentCard = memo(function SubagentCard({
 			<div className="flex flex-col gap-1 px-4 py-3 text-[13px] leading-5">
 				{task ? <div className="text-ink">{task}</div> : null}
 				<div className="flex flex-wrap gap-x-3 gap-y-1 text-ink-muted">
-					{model ? <span>模型 {model}</span> : null}
-					<span>状态 {status}</span>
-					{toolCalls > 0 ? <span>工具 {toolCalls}</span> : null}
+					{model ? <span>{t("模型")}{model}</span> : null}
+					<span>{t("状态")}{status}</span>
+					{toolCalls > 0 ? <span>{t("工具")}{toolCalls}</span> : null}
 				</div>
 				{resultText ? (
 					<div className="mt-1 max-h-[320px] overflow-auto whitespace-pre-wrap break-words text-ink-muted">

@@ -7,4 +7,5 @@ artifacts/
 .playwright-cli/
 .pi/
 config/agent/
+data/
 *.log

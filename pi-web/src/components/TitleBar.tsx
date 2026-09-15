@@ -5,6 +5,7 @@ import { usePiStore } from "../state/store";
 import { useUiStore } from "../state/ui";
 import { MENU_ITEM_CLASS, MENU_LABEL_CLASS, MENU_PANEL_CLASS, MENU_SEPARATOR_CLASS, MENU_SHORTCUT_CLASS } from "./Menu";
 import { Presence } from "./Presence";
+import { t } from "../i18n";
 
 interface MenuEntry {
 	label: string;
@@ -127,7 +128,7 @@ export function TitleBar() {
 		{
 			entries: [
 				{
-					label: "新对话",
+					label: t("新对话"),
 					onSelect: () => {
 						setView("chat");
 						void newSession();
@@ -135,53 +136,53 @@ export function TitleBar() {
 					shortcut: "Ctrl+N",
 				},
 				{
-					label: "添加项目…",
+					label: t("添加项目…"),
 					onSelect: () => setProjectDialogOpen(true),
 				},
 				{ separator: true, label: "sep-1" },
-				{ label: "退出", onSelect: desktop("app-quit") },
+				{ label: t("退出"), onSelect: desktop("app-quit") },
 			],
-			label: "文件",
+			label: t("文件"),
 		},
 		{
 			entries: [
-				{ label: "撤销", onSelect: desktop("edit-undo"), shortcut: "Ctrl+Z" },
-				{ label: "重做", onSelect: desktop("edit-redo"), shortcut: "Ctrl+Y" },
+				{ label: t("撤销"), onSelect: desktop("edit-undo"), shortcut: "Ctrl+Z" },
+				{ label: t("重做"), onSelect: desktop("edit-redo"), shortcut: "Ctrl+Y" },
 				{ separator: true, label: "sep-2" },
-				{ label: "剪切", onSelect: desktop("edit-cut"), shortcut: "Ctrl+X" },
-				{ label: "复制", onSelect: desktop("edit-copy"), shortcut: "Ctrl+C" },
-				{ label: "粘贴", onSelect: desktop("edit-paste"), shortcut: "Ctrl+V" },
-				{ label: "删除", onSelect: desktop("edit-delete") },
+				{ label: t("剪切"), onSelect: desktop("edit-cut"), shortcut: "Ctrl+X" },
+				{ label: t("复制"), onSelect: desktop("edit-copy"), shortcut: "Ctrl+C" },
+				{ label: t("粘贴"), onSelect: desktop("edit-paste"), shortcut: "Ctrl+V" },
+				{ label: t("删除"), onSelect: desktop("edit-delete") },
 				{ separator: true, label: "sep-2b" },
-				{ label: "全选", onSelect: desktop("edit-select-all"), shortcut: "Ctrl+A" },
+				{ label: t("全选"), onSelect: desktop("edit-select-all"), shortcut: "Ctrl+A" },
 			],
-			label: "编辑",
+			label: t("编辑"),
 		},
 		{
 			entries: [
 				{
-					label: sidebarCollapsed ? "展开侧栏" : "收起侧栏",
+					label: sidebarCollapsed ? t("展开侧栏") : t("收起侧栏"),
 					onSelect: () => setSidebarCollapsed(!sidebarCollapsed),
 				},
 				{ separator: true, label: "sep-view" },
-				{ label: "重新加载", onSelect: desktop("view-reload") },
-				{ label: "强制重新加载", onSelect: desktop("view-force-reload") },
+				{ label: t("重新加载"), onSelect: desktop("view-reload") },
+				{ label: t("强制重新加载"), onSelect: desktop("view-force-reload") },
 				{ separator: true, label: "sep-3" },
-				{ label: "实际大小", onSelect: desktop("view-zoom-reset"), shortcut: "Ctrl+0" },
-				{ label: "放大", onSelect: desktop("view-zoom-in"), shortcut: "Ctrl+=" },
-				{ label: "缩小", onSelect: desktop("view-zoom-out"), shortcut: "Ctrl+-" },
+				{ label: t("实际大小"), onSelect: desktop("view-zoom-reset"), shortcut: "Ctrl+0" },
+				{ label: t("放大"), onSelect: desktop("view-zoom-in"), shortcut: "Ctrl+=" },
+				{ label: t("缩小"), onSelect: desktop("view-zoom-out"), shortcut: "Ctrl+-" },
 				{ separator: true, label: "sep-4" },
-				{ label: "全屏", onSelect: desktop("view-fullscreen"), shortcut: "F11" },
+				{ label: t("全屏"), onSelect: desktop("view-fullscreen"), shortcut: "F11" },
 			],
-			label: "视图",
+			label: t("视图"),
 		},
 		{
 			entries: [
-				{ label: "设置", onSelect: () => setSettingsOpen(true), shortcut: "Ctrl+," },
+				{ label: t("设置"), onSelect: () => setSettingsOpen(true), shortcut: "Ctrl+," },
 				{ separator: true, label: "sep-more" },
-				{ label: "关于 π7", onSelect: () => setAboutOpen(true) },
+				{ label: t("关于 π7"), onSelect: () => setAboutOpen(true) },
 			],
-			label: "更多",
+			label: t("更多"),
 		},
 	];
 
@@ -190,7 +191,7 @@ export function TitleBar() {
 			<button
 				className="flex h-7 w-7 items-center justify-center rounded-md text-[#4b5563] transition-colors hover:bg-black/[0.06]"
 				onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-				title={sidebarCollapsed ? "展开侧栏" : "收起侧栏"}
+				title={sidebarCollapsed ? t("展开侧栏") : t("收起侧栏")}
 				type="button"
 			>
 				<PanelLeft size={15} />
@@ -202,18 +203,18 @@ export function TitleBar() {
 			</div>
 			<div className="h-full min-w-8 flex-1 [-webkit-app-region:drag]" />
 			<div className="flex items-center gap-0.5">
-				<WindowButton onClick={() => void window.pi.windowControl("minimize")} title="最小化">
+				<WindowButton onClick={() => void window.pi.windowControl("minimize")} title={t("最小化")}>
 					<Minus size={14} />
 				</WindowButton>
 				<WindowButton
 					onClick={() => {
 						void window.pi.windowControl("toggle-maximize").then(setMaximized);
 					}}
-					title={maximized ? "向下还原" : "最大化"}
+					title={maximized ? t("向下还原") : t("最大化")}
 				>
 					{maximized ? <Copy size={11} /> : <Square size={11} />}
 				</WindowButton>
-				<WindowButton danger onClick={() => void window.pi.windowControl("close")} title="关闭" wide>
+				<WindowButton danger onClick={() => void window.pi.windowControl("close")} title={t("关闭")} wide>
 					<X size={14} />
 				</WindowButton>
 			</div>

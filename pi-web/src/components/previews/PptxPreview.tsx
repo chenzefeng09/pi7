@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { PPTXViewer } from "pptx-viewer";
+import { t } from "../../i18n";
 
 /** Visual PPTX renderer. The library runs entirely in the renderer process. */
 export function PptxPreview({ blob }: { blob: Blob }): JSX.Element {
@@ -22,7 +23,7 @@ export function PptxPreview({ blob }: { blob: Blob }): JSX.Element {
 			})()
 			.catch((reason: unknown) => {
 				if (!cancelled) {
-					setError(reason instanceof Error ? reason.message : "无法渲染 PPTX");
+					setError(reason instanceof Error ? reason.message : t("无法渲染 PPTX"));
 					setStatus("error");
 				}
 			});
@@ -35,9 +36,9 @@ export function PptxPreview({ blob }: { blob: Blob }): JSX.Element {
 
 	return (
 		<section className="overflow-hidden rounded-lg border border-black/[0.06] bg-[#f7f7f8]">
-			<div className="border-b border-black/[0.06] px-4 py-2 text-[12px] font-medium text-[#667085]">演示文稿预览</div>
-			{status === "loading" ? <div className="p-4 text-[12px] text-[#98a2b3]">渲染演示文稿...</div> : null}
-			{status === "error" ? <div className="p-4 text-[12px] text-[#f04438]">PPTX 解析失败：{error}</div> : null}
+			<div className="border-b border-black/[0.06] px-4 py-2 text-[12px] font-medium text-[#667085]">{t("演示文稿预览")}</div>
+			{status === "loading" ? <div className="p-4 text-[12px] text-[#98a2b3]">{t("渲染演示文稿...")}</div> : null}
+			{status === "error" ? <div className="p-4 text-[12px] text-[#f04438]">{t("PPTX 解析失败：")}{error}</div> : null}
 			<div
 				className="max-h-[calc(100vh-170px)] overflow-auto bg-[#e7e9ec] p-3"
 				ref={containerRef}

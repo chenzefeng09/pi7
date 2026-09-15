@@ -1,16 +1,17 @@
 import { Brain, RefreshCw } from "lucide-react";
 import { usePiStore } from "../state/store";
 import { ModelSelector } from "./ModelSelector";
+import { t } from "../i18n";
 
 function thinkingLevelLabel(level: string): string {
 	const labels: Record<string, string> = {
-		off: "关闭",
-		minimal: "最低",
-		low: "低",
-		medium: "中",
-		high: "高",
-		xhigh: "极高",
-		max: "最高",
+		off: t("关闭"),
+		minimal: t("最低"),
+		low: t("低"),
+		medium: t("中"),
+		high: t("高"),
+		xhigh: t("极高"),
+		max: t("最高"),
 	};
 	return labels[level] ?? level;
 }
@@ -29,12 +30,12 @@ export function StatusBar() {
 	const thinkingLevel = usePiStore((state) => state.thinkingLevel);
 	const statusLabel =
 		status === "idle"
-			? "空闲"
+			? t("空闲")
 			: status === "starting"
-				? "启动中"
+				? t("启动中")
 				: status === "streaming"
-					? "生成中"
-					: "错误";
+					? t("生成中")
+					: t("错误");
 	return (
 		<div className="flex items-center gap-3 border-t border-line bg-canvas px-6 py-1.5 text-xs text-ink-muted">
 			<span className="font-medium text-ink">{statusLabel}</span>
@@ -42,7 +43,7 @@ export function StatusBar() {
 			<button
 				className="rounded border border-line p-0.5 hover:bg-surface-hover"
 				onClick={() => void cycleModel()}
-				title="切换模型"
+				title={t("切换模型")}
 				type="button"
 			>
 				<RefreshCw size={12} />
@@ -64,15 +65,15 @@ export function StatusBar() {
 			<button
 				className="rounded border border-line p-0.5 hover:bg-surface-hover"
 				onClick={() => void cycleThinkingLevel()}
-				title="切换推理强度"
+				title={t("切换推理强度")}
 				type="button"
 			>
 				<Brain size={12} />
 			</button>
 			{sessionStats?.contextUsage?.percent !== null && sessionStats?.contextUsage?.percent !== undefined ? (
-				<span>上下文 {sessionStats.contextUsage.percent.toFixed(0)}%</span>
+				<span>{t("上下文")}{sessionStats.contextUsage.percent.toFixed(0)}%</span>
 			) : null}
-			{compactionStatus === "running" ? <span className="text-blue-600">正在压缩...</span> : null}
+			{compactionStatus === "running" ? <span className="text-blue-600">{t("正在压缩...")}</span> : null}
 			{Object.entries(extensionStatuses)
 				.filter(([, text]) => text)
 				.map(([key, text]) => (

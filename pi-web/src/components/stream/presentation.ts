@@ -1,6 +1,7 @@
 import type { ToolCallBlock } from "../../state/types";
 import type { DiffRow } from "./blocks";
 import type { RowState } from "./rows";
+import { t } from "../../i18n";
 
 /** Icon keys the row layer maps to lucide components, so the derivation stays testable. */
 export type ToolIconName = "browse" | "checklist" | "edit" | "globe" | "search" | "sparkle" | "terminal" | "write";
@@ -39,23 +40,23 @@ const MAX_IO_INPUT_CHARS = 4000;
 
 const TOOL_META: Record<string, { icon: ToolIconName; title: string }> = {
 	bash: { icon: "terminal", title: "Bash" },
-	edit: { icon: "edit", title: "编辑" },
-	fetch_content: { icon: "browse", title: "网页获取" },
+	edit: { icon: "edit", title: t("编辑") },
+	fetch_content: { icon: "browse", title: t("网页获取") },
 	find: { icon: "search", title: "Glob" },
-	get_search_content: { icon: "browse", title: "读取网页" },
+	get_search_content: { icon: "browse", title: t("读取网页") },
 	grep: { icon: "search", title: "Grep" },
-	ls: { icon: "browse", title: "列出目录" },
+	ls: { icon: "browse", title: t("列出目录") },
 	powershell: { icon: "terminal", title: "Pwsh" },
-	read: { icon: "browse", title: "读取" },
-	skill: { icon: "sparkle", title: "技能" },
-	subagent: { icon: "sparkle", title: "子代理" },
-	task: { icon: "sparkle", title: "子代理" },
-	todo: { icon: "checklist", title: "更新任务清单" },
-	todo_write: { icon: "checklist", title: "更新任务清单" },
-	todos: { icon: "checklist", title: "更新任务清单" },
-	web_fetch: { icon: "browse", title: "网页获取" },
-	web_search: { icon: "globe", title: "网页搜索" },
-	write: { icon: "write", title: "写入" },
+	read: { icon: "browse", title: t("读取") },
+	skill: { icon: "sparkle", title: t("技能") },
+	subagent: { icon: "sparkle", title: t("子代理") },
+	task: { icon: "sparkle", title: t("子代理") },
+	todo: { icon: "checklist", title: t("更新任务清单") },
+	todo_write: { icon: "checklist", title: t("更新任务清单") },
+	todos: { icon: "checklist", title: t("更新任务清单") },
+	web_fetch: { icon: "browse", title: t("网页获取") },
+	web_search: { icon: "globe", title: t("网页搜索") },
+	write: { icon: "write", title: t("写入") },
 };
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -117,8 +118,8 @@ export function parseShellResult(output: string): { exitCode?: number; failure?:
 	if (!match) return { stdout: output };
 	const trailer = output.slice(match.index).trim();
 	if (match[1] !== undefined) return { exitCode: Number(match[1]), stdout: output.slice(0, match.index) };
-	if (trailer === "Command aborted") return { failure: "已停止", stdout: output.slice(0, match.index) };
-	return { failure: `超时 ${match[2]}`, stdout: output.slice(0, match.index) };
+	if (trailer === "Command aborted") return { failure: t("已停止"), stdout: output.slice(0, match.index) };
+	return { failure: t("超时 {arg}", { "arg": match[2] }), stdout: output.slice(0, match.index) };
 }
 
 /** True when the row's failure is an interruption rather than a tool error. */
@@ -260,7 +261,7 @@ function subagentBody(details: Record<string, unknown> | undefined, output: stri
 	const result = asRecord(record?.result) ?? record ?? {};
 	const errorMessage = typeof result.errorMessage === "string" ? result.errorMessage : undefined;
 	const stopReason = typeof result.stopReason === "string" ? result.stopReason : undefined;
-	const status = errorMessage ? "错误" : stopReason === "stop" || stopReason === undefined ? "完成" : stopReason;
+	const status = errorMessage ? t("错误") : stopReason === "stop" || stopReason === undefined ? t("完成") : stopReason;
 	const toolActivity = Array.isArray(result.toolActivity) ? result.toolActivity : [];
 	return {
 		kind: "subagent",
@@ -291,7 +292,7 @@ function ioBody(args: Record<string, unknown> | undefined, output: string): Tool
 export function deriveToolPresentation(block: ToolCallBlock, cwd?: string): ToolPresentation {
 	const args = asRecord(block.args);
 	const details = asRecord(block.details);
-	const meta = TOOL_META[block.toolName] ?? { icon: "sparkle" as const, title: "工具调用" };
+	const meta = TOOL_META[block.toolName] ?? { icon: "sparkle" as const, title: t("工具调用") };
 	const path = pickString(args, ["path", "file_path", "filePath"]);
 	const shell = block.toolName === "bash" || block.toolName === "powershell";
 	const parsed = shell ? parseShellResult(block.output) : undefined;
@@ -359,15 +360,15 @@ export function deriveToolPresentation(block: ToolCallBlock, cwd?: string): Tool
 		const status = details?.status;
 		if (typeof status === "number") meta.push(`HTTP ${status}`);
 		const chars = details?.totalChars ?? details?.returnedChars ?? details?.contentLength;
-		if (typeof chars === "number") meta.push(`${chars} 字符`);
-		if (details?.truncated === true) meta.push("内容已截断");
+		if (typeof chars === "number") meta.push(t("{chars} 字符", { "chars": chars }));
+		if (details?.truncated === true) meta.push(t("内容已截断"));
 		body = { content: block.output, kind: "fetch", meta, url };
 	} else {
 		const todos = todoItems(details);
 		const isSubagent = block.toolName === "subagent" || block.toolName === "task";
 		if (todos.length > 0) {
 			const done = todos.filter((todo) => todo.done).length;
-			summary = `${done}/${todos.length} 已完成`;
+			summary = t("{done}/{length} 已完成", { "done": done, "length": todos.length });
 			body = { kind: "todos", todos };
 		} else if (isSubagent) {
 			summary = firstLine(firstStringArg(args) ?? "");
@@ -382,7 +383,7 @@ export function deriveToolPresentation(block: ToolCallBlock, cwd?: string): Tool
 	if (summary === "" && !shell && block.toolName !== "web_search" && !TOOL_META[block.toolName]) {
 		summary = block.toolName;
 	}
-	if (block.state === "running" && summary === "") summary = "运行中";
+	if (block.state === "running" && summary === "") summary = t("运行中");
 
 	const state: RowState =
 		block.state === "running"
@@ -397,7 +398,7 @@ export function deriveToolPresentation(block: ToolCallBlock, cwd?: string): Tool
 			? firstLine(
 					visibleLines(parsed?.stdout ?? block.output)
 						.filter((line) => line.trim() !== "")
-						.join("\n") || "失败",
+						.join("\n") || t("失败"),
 				)
 			: undefined;
 

@@ -1,5 +1,6 @@
 import { ChevronDown } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useState } from "react";
+import { t } from "../../i18n";
 
 /**
  * Run state of one conversation flow row.
@@ -12,9 +13,9 @@ export type RowState = "running" | "ok" | "error" | "stopped";
 
 /** Visually hidden run-state text: the dot and the sweep are colour/animation only. */
 function statusText(state: RowState): string | undefined {
-	if (state === "running") return "运行中";
-	if (state === "error") return "失败";
-	if (state === "stopped") return "已停止";
+	if (state === "running") return t("运行中");
+	if (state === "error") return t("失败");
+	if (state === "stopped") return t("已停止");
 	return undefined;
 }
 
@@ -176,13 +177,13 @@ export function FoldToggle({
 			style={{ paddingLeft: indent }}
 			type="button"
 		>
-			{expanded ? "收起" : `… 其余 ${hidden} 行`}
+			{expanded ? t("收起") : t("… 其余 {hidden} 行", { "hidden": hidden })}
 		</button>
 	);
 }
 
 /** Banner copy affordance used by the read, terminal and diff cards. */
-export function CopyButton({ label = "复制", text }: { label?: string; text: string }) {
+export function CopyButton({ label = t("复制"), text }: { label?: string; text: string }) {
 	const [copied, setCopied] = useState(false);
 	if (!text) return null;
 	return (
@@ -199,7 +200,7 @@ export function CopyButton({ label = "复制", text }: { label?: string; text: s
 			}}
 			type="button"
 		>
-			{copied ? "复制成功" : label}
+			{copied ? t("复制成功") : label}
 		</button>
 	);
 }

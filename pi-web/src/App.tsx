@@ -5,6 +5,7 @@ import { ConnectionBanner } from "./components/ConnectionBanner";
 import { ExtensionDialogHost } from "./components/ExtensionDialogHost";
 import { FilePanel } from "./components/FilePanel";
 import { ModelChangeBanner } from "./components/ModelChangeBanner";
+import { ModelSetupBanner } from "./components/ModelSetupBanner";
 import { Notifications } from "./components/Notifications";
 import { ScheduledTaskRunner } from "./components/ScheduledTaskRunner";
 import { ScheduleView } from "./components/ScheduleView";
@@ -19,6 +20,7 @@ import { EventBatcher } from "./state/event-batcher";
 import { useCompactionSettings } from "./state/compaction";
 import { usePiStore } from "./state/store";
 import { useUiStore } from "./state/ui";
+import { t } from "./i18n";
 
 export function App() {
 	const applyEvent = usePiStore((state) => state.applyEvent);
@@ -110,7 +112,9 @@ export function App() {
 			usePiStore.setState({
 				activeHandleId: undefined,
 				backgroundSessions: {},
-				connectionError: `pi RPC 进程已退出${info ? `（${JSON.stringify(info)}）` : ""}。请重新连接以继续。`,
+				connectionError: t("pi RPC 进程已退出{detail}。请重新连接以继续。", {
+					detail: info ? t("（{info}）", { info: JSON.stringify(info) }) : "",
+				}),
 				extensionUiRequests: [],
 				extensionUiStatuses: {},
 				extensionUiWidgets: {},
@@ -151,6 +155,7 @@ export function App() {
 						<>
 							<TopBar />
 							<ModelChangeBanner />
+							<ModelSetupBanner />
 							<div className="relative flex min-h-0 flex-1 flex-col">
 								<Transcript />
 								<div className="pointer-events-none absolute bottom-0 left-0 right-2">

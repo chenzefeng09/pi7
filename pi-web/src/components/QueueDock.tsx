@@ -1,6 +1,7 @@
 import { ArrowUp, ListOrdered, RotateCcw, Trash2 } from "lucide-react";
 import { usePiStore } from "../state/store";
 import type { QueueState } from "../state/types";
+import { t } from "../i18n";
 
 /** One row of the dock: which queue the message sits in, where, and what it says. */
 interface QueuedRow {
@@ -84,7 +85,7 @@ export function QueueDock() {
 						<button
 							className="min-w-0 flex-1 truncate text-left text-[13px] text-[#667085] transition-colors hover:text-[#1f2937]"
 							onClick={() => void recallQueuedMessage(row.kind, row.index)}
-							title="取回到输入框编辑"
+							title={t("取回到输入框编辑")}
 							type="button"
 						>
 							{row.text}
@@ -92,18 +93,18 @@ export function QueueDock() {
 						<div className="flex shrink-0 items-center gap-1">
 							<RowAction
 								icon={RotateCcw}
-								label="取回到输入框编辑"
+								label={t("取回到输入框编辑")}
 								onClick={() => void recallQueuedMessage(row.kind, row.index)}
 							/>
 							<RowAction
 								icon={Trash2}
-								label="移出队列"
+								label={t("移出队列")}
 								onClick={() => void removeQueuedMessage(row.kind, row.index)}
 							/>
 							{running ? (
 								<RowAction
 									icon={ArrowUp}
-									label="插话：立刻交给正在运行的一轮"
+									label={t("插话：立刻交给正在运行的一轮")}
 									onClick={() => void steerQueuedMessage(row.kind, row.index)}
 								/>
 							) : null}

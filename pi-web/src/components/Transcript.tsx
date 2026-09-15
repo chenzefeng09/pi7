@@ -9,6 +9,7 @@ import { Modal } from "./Modal";
 import { TurnView, TurnStatus } from "./stream/Turn";
 import { groupTurns, promptEntryIds, type Turn } from "./stream/turns";
 import { type RailMark, TurnRail } from "./TurnRail";
+import { t } from "../i18n";
 
 /** Flattened answer text of a turn, for the rail's preview: one line of prompt, a few of the answer. */
 function turnText(turn: Turn): string {
@@ -23,21 +24,21 @@ function turnText(turn: Turn): string {
 
 const SUGGESTIONS = [
 	{
-		description: "探索并理解代码",
+		description: t("探索并理解代码"),
 		icon: SearchCode,
-		prompt: "探索这个代码库并解释它是如何工作的。",
+		prompt: t("探索这个代码库并解释它是如何工作的。"),
 		tone: "text-[#2f7df6]",
 	},
 	{
-		description: "构建新功能、应用或工具",
+		description: t("构建新功能、应用或工具"),
 		icon: Hammer,
-		prompt: "构建一个新功能。先检查代码库并提出具体方案。",
+		prompt: t("构建一个新功能。先检查代码库并提出具体方案。"),
 		tone: "text-[#8b5cf6]",
 	},
 	{
-		description: "审查代码并给出修改建议",
+		description: t("审查代码并给出修改建议"),
 		icon: GitPullRequest,
-		prompt: "审查当前改动并给出具体的改进建议。",
+		prompt: t("审查当前改动并给出具体的改进建议。"),
 		tone: "text-[#22c55e]",
 	},
 ];
@@ -46,7 +47,7 @@ function EmptyState() {
 	return (
 		<div className="flex min-h-full flex-col items-center justify-center px-6 pb-28 pt-8">
 			<Cloud className="text-[#cdd3da]" size={44} strokeWidth={1.4} />
-			<h1 className="mt-6 text-[26px] font-normal tracking-[-0.02em] text-[#111827]">想用 π7 做什么？</h1>
+			<h1 className="mt-6 text-[26px] font-normal tracking-[-0.02em] text-[#111827]">{t("想用 π7 做什么？")}</h1>
 			<div className="mt-8 grid w-full max-w-[680px] grid-cols-1 gap-4 md:grid-cols-3">
 				{SUGGESTIONS.map((suggestion) => {
 					const Icon = suggestion.icon;
@@ -89,14 +90,12 @@ function ForkConfirmDialog({ onClose, open }: { onClose: () => void; open: boole
 			open={open}
 		>
 			<>
-				<div className="text-[17px] font-semibold tracking-[-0.01em] text-[#111827]">分叉到新会话</div>
+				<div className="text-[17px] font-semibold tracking-[-0.01em] text-[#111827]">{t("分叉到新会话")}</div>
 				<div className="mt-2 text-[13px] leading-5 text-[#667085]">
-					当前会话的完整分支会被复制成一个新的会话文件，并切换到这个新会话；原会话保留在项目列表里，不会被修改。
-				</div>
+					{t("当前会话的完整分支会被复制成一个新的会话文件，并切换到这个新会话；原会话保留在项目列表里，不会被修改。")}</div>
 				<div className="mt-5 flex justify-end gap-2">
 					<button className={buttonClass()} onClick={onClose} type="button">
-						取消
-					</button>
+						{t("取消")}</button>
 					<button
 						className={buttonClass("primary")}
 						onClick={() => {
@@ -105,8 +104,7 @@ function ForkConfirmDialog({ onClose, open }: { onClose: () => void; open: boole
 						}}
 						type="button"
 					>
-						分叉
-					</button>
+						{t("分叉")}</button>
 				</div>
 			</>
 		</Modal>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { usePiStore } from "../state/store";
 import { buttonClass } from "./buttons";
 import { Modal } from "./Modal";
+import { t } from "../i18n";
 
 export function BashDialog({ onClose, open }: { onClose: () => void; open: boolean }) {
 	const abortBash = usePiStore((state) => state.abortBash);
@@ -19,20 +20,19 @@ export function BashDialog({ onClose, open }: { onClose: () => void; open: boole
 		>
 			<>
 				<div className="flex items-center justify-between border-b border-line px-5 py-3">
-					<div className="text-base font-semibold">运行 Bash</div>
+					<div className="text-base font-semibold">{t("运行 Bash")}</div>
 					<button
 						className="rounded px-2 py-1 text-sm text-ink-muted hover:bg-surface-hover"
 						onClick={onClose}
 						type="button"
 					>
-						关闭
-					</button>
+						{t("关闭")}</button>
 				</div>
 				<div className="space-y-3 p-5">
 					<textarea
 						className="h-24 w-full resize-none rounded-lg border border-line px-3 py-2 font-mono text-sm outline-none focus:border-accent"
 						onChange={(event) => setCommand(event.target.value)}
-						placeholder="命令"
+						placeholder={t("命令")}
 						value={command}
 					/>
 					<label className="flex items-center gap-2 text-sm">
@@ -41,8 +41,7 @@ export function BashDialog({ onClose, open }: { onClose: () => void; open: boole
 							onChange={(event) => setExcludeFromContext(event.target.checked)}
 							type="checkbox"
 						/>
-						输出不加入模型上下文
-					</label>
+						{t("输出不加入模型上下文")}</label>
 					<div className="flex gap-2">
 						<button
 							className={buttonClass("primary")}
@@ -50,7 +49,7 @@ export function BashDialog({ onClose, open }: { onClose: () => void; open: boole
 							onClick={() => void runBash(command, excludeFromContext)}
 							type="button"
 						>
-							{bashRunning ? "运行中..." : "运行"}
+							{bashRunning ? t("运行中...") : t("运行")}
 						</button>
 						<button
 							className={buttonClass()}
@@ -58,8 +57,7 @@ export function BashDialog({ onClose, open }: { onClose: () => void; open: boole
 							onClick={() => void abortBash()}
 							type="button"
 						>
-							中止
-						</button>
+							{t("中止")}</button>
 					</div>
 					<pre className="max-h-[40vh] overflow-auto whitespace-pre-wrap rounded-lg border border-line bg-surface-muted p-3 font-mono text-xs">
 						{bashOutput ?? ""}

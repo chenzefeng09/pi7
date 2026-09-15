@@ -38,6 +38,7 @@ import {
 import { Modal } from "./Modal";
 import { popoverOverlayClass, popoverPanelClass, Presence } from "./Presence";
 import { cacheHitRate, formatPercent, formatTokens } from "./usage";
+import { t } from "../i18n";
 
 const PINNED_SESSIONS_KEY = "pi-web.pinned-sessions";
 
@@ -51,8 +52,8 @@ function readStringList(key: string): string[] {
 }
 
 function sessionTitle(session: SessionInfo): string {
-	const rawTitle = session.name ?? session.firstMessage ?? "新对话";
-	return /^[A-Za-z]:[\\/]/.test(rawTitle) || rawTitle.startsWith("/") ? "新对话" : rawTitle;
+	const rawTitle = session.name ?? session.firstMessage ?? t("新对话");
+	return /^[A-Za-z]:[\\/]/.test(rawTitle) || rawTitle.startsWith("/") ? t("新对话") : rawTitle;
 }
 
 function sessionTime(value: string): string {
@@ -491,24 +492,24 @@ export function Sidebar() {
 					}`}
 					onClick={() => void openSession(session)}
 					onContextMenu={(event) => openSessionMenu(event, session, true)}
-					title={`${title} · 会话 ${session.id.slice(0, 8)} · ${sessionTime(session.updatedAt)}`}
+					title={t("{title} · 会话 {arg} · {arg2}", { "title": title, "arg": session.id.slice(0, 8), "arg2": sessionTime(session.updatedAt) })}
 					type="button"
 				>
 					<span className="min-w-0 flex-1 truncate">{title}</span>
 					{pinned ? <Pin className="shrink-0 text-[#9aa3ad]" size={11} /> : null}
 					{running ? (
-						<span className="flex shrink-0 items-center text-[#7f9d88]" title="正在运行">
+						<span className="flex shrink-0 items-center text-[#7f9d88]" title={t("正在运行")}>
 							<Loader2 className="animate-spin" size={13} />
 						</span>
 					) : null}
 					{unread ? (
-						<span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#2f7df6]" title="有新内容" />
+						<span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#2f7df6]" title={t("有新内容")} />
 					) : null}
 				</button>
 				<button
 					className="mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-[#8a938c] opacity-0 transition-opacity hover:bg-black/[0.06] group-hover:opacity-100"
 					onClick={(event) => openSessionMenu(event, session, false)}
-					title="会话菜单"
+					title={t("会话菜单")}
 					type="button"
 				>
 					<MoreHorizontal size={15} />
@@ -523,7 +524,7 @@ export function Sidebar() {
 				<button
 					className="flex items-center rounded-lg px-1 py-1 text-[17px] font-bold tracking-[-0.01em] hover:bg-black/[0.05]"
 					onClick={() => setAboutOpen(true)}
-					title="关于 π7"
+					title={t("关于 π7")}
 					type="button"
 				>
 					π7
@@ -535,7 +536,7 @@ export function Sidebar() {
 							setSearchOpen((value) => !value);
 							setSearchQuery("");
 						}}
-						title="搜索会话"
+						title={t("搜索会话")}
 						type="button"
 					>
 						<Search size={17} />
@@ -543,7 +544,7 @@ export function Sidebar() {
 					<button
 						className={`flex h-8 w-8 items-center justify-center rounded-lg text-[#4b5563] hover:bg-black/[0.05] ${bellOpen ? "bg-black/[0.07]" : ""}`}
 						onClick={() => setBellOpen((value) => !value)}
-						title="通知记录"
+						title={t("通知记录")}
 						type="button"
 					>
 						<Bell size={17} />
@@ -559,19 +560,18 @@ export function Sidebar() {
 							/>
 							<div className={`${MENU_PANEL_CLASS} ${popoverPanelClass(phase)} right-2 top-[50px] w-[320px] p-0`}>
 								<div className="flex items-center justify-between px-3 pb-1 pt-2">
-									<span className="text-[12px] font-medium text-[#8b95a1]">通知记录</span>
+									<span className="text-[12px] font-medium text-[#8b95a1]">{t("通知记录")}</span>
 									{notificationHistory.length > 0 ? (
 										<button
 											className="text-[11px] text-[#98a2b3] hover:text-[#4b5563]"
 											onClick={() => clearNotificationHistory()}
 											type="button"
 										>
-											清空
-										</button>
+											{t("清空")}</button>
 									) : null}
 								</div>
 								{notificationHistory.length === 0 ? (
-									<div className="px-2.5 py-5 text-center text-[12px] text-[#98a2b3]">暂无通知</div>
+									<div className="px-2.5 py-5 text-center text-[12px] text-[#98a2b3]">{t("暂无通知")}</div>
 								) : (
 									<div className="scrollbar-subtle max-h-[300px] overflow-y-auto pb-1">
 										{notificationHistory.map((notification) => (
@@ -619,7 +619,7 @@ export function Sidebar() {
 									setSearchQuery("");
 								}
 							}}
-							placeholder="搜索会话"
+							placeholder={t("搜索会话")}
 							ref={searchRef}
 							value={searchQuery}
 						/>
@@ -631,13 +631,13 @@ export function Sidebar() {
 				<div className="group flex items-center rounded-lg transition-colors hover:bg-black/[0.05]">
 					<SidebarAction
 						icon={<SquarePen size={18} />}
-						label="新对话"
+						label={t("新对话")}
 						onClick={() => void startSession(blankSession ? undefined : sessionCwd)}
 					/>
 					<button
 						className="mr-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#6b7280] opacity-0 transition-opacity hover:bg-black/[0.06] group-hover:opacity-100"
 						onClick={() => void startSession(blankSession ? undefined : sessionCwd)}
-						title={activeProjectName ? `在 ${activeProjectName} 中新建会话` : "新对话"}
+						title={activeProjectName ? t("在 {activeProjectName} 中新建会话", { "activeProjectName": activeProjectName }) : t("新对话")}
 						type="button"
 					>
 						<CirclePlus size={16} />
@@ -645,7 +645,7 @@ export function Sidebar() {
 				</div>
 				<SidebarAction
 					icon={<CalendarClock size={18} />}
-					label="定时任务"
+					label={t("定时任务")}
 					onClick={() => setView("schedule")}
 				/>
 			</nav>
@@ -653,18 +653,18 @@ export function Sidebar() {
 			<div className="scrollbar-subtle mt-6 flex-1 overflow-y-auto px-2.5 pb-4">
 				{searchOpen && query ? (
 					filteredSessions.length === 0 ? (
-						<div className="px-3 py-2 text-[13px] text-[#8a938c]">没有匹配的会话</div>
+						<div className="px-3 py-2 text-[13px] text-[#8a938c]">{t("没有匹配的会话")}</div>
 					) : (
 						filteredSessions.map((session) => renderSession(session))
 					)
 				) : (
 					<>
 						<div className="flex items-center justify-between px-3 pb-2">
-							<span className="text-[13px] font-medium text-[#8a938c]">项目</span>
+							<span className="text-[13px] font-medium text-[#8a938c]">{t("项目")}</span>
 							<button
 								className="flex h-5 w-5 items-center justify-center rounded text-[#8a938c] hover:bg-black/[0.06] hover:text-[#4b5563]"
 								onClick={() => setProjectDialogOpen(true)}
-								title="添加项目"
+								title={t("添加项目")}
 								type="button"
 							>
 								<Plus size={14} />
@@ -741,7 +741,7 @@ export function Sidebar() {
 												event.stopPropagation();
 												void startSession(group.cwd);
 											}}
-											title={`在 ${group.name} 中新建会话`}
+											title={t("在 {name} 中新建会话", { "name": group.name })}
 											type="button"
 										>
 											<SquarePen size={15} />
@@ -749,7 +749,7 @@ export function Sidebar() {
 										<button
 											className="mr-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#8a938c] opacity-0 transition-opacity hover:bg-black/[0.06] group-hover:opacity-100"
 											onClick={(event) => openProjectMenu(event, group.cwd)}
-											title="项目菜单"
+											title={t("项目菜单")}
 											type="button"
 										>
 											<MoreHorizontal size={16} />
@@ -798,7 +798,7 @@ export function Sidebar() {
 													}
 													type="button"
 												>
-													{showAll ? "收起" : "展开显示"}
+													{showAll ? t("收起") : t("展开显示")}
 												</button>
 											) : null}
 										</div>
@@ -806,7 +806,7 @@ export function Sidebar() {
 								</div>
 							);
 						})}
-						{sessions.length === 0 ? <div className="px-3 py-2 text-[13px] text-[#8a938c]">暂无会话</div> : null}
+						{sessions.length === 0 ? <div className="px-3 py-2 text-[13px] text-[#8a938c]">{t("暂无会话")}</div> : null}
 					</>
 				)}
 			</div>
@@ -821,13 +821,13 @@ export function Sidebar() {
 					<button
 						className="flex w-full flex-col gap-0.5 rounded-lg px-2 py-1 text-left transition-colors hover:bg-black/[0.04]"
 						onClick={() => setSessionPanel("stats")}
-						title="会话统计"
+						title={t("会话统计")}
 						type="button"
 					>
 						<span className="flex items-center gap-1.5 text-[11px] leading-4 text-[#98a2b3]">
 							<Gauge className="shrink-0 text-[#b6bcc4]" size={12} />
 							<span className="truncate">
-								{sessionStats ? `${sessionStats.userMessages} 轮 ${sessionStats.toolCalls} 步` : "—"}
+								{sessionStats ? t("{userMessages} 轮 {toolCalls} 步", { "userMessages": sessionStats.userMessages, "toolCalls": sessionStats.toolCalls }) : "—"}
 								{tokensPerSecond ? ` · ${Math.round(tokensPerSecond)} tok/s` : ""}
 							</span>
 						</span>
@@ -835,7 +835,7 @@ export function Sidebar() {
 							<Database className="shrink-0 text-[#b6bcc4]" size={12} />
 							<span className="truncate">
 								{sessionStats ? `${formatTokens(sessionStats.tokens.total)} tok` : "—"}
-								{hitRate === undefined ? "" : ` · 缓存命中 ${formatPercent(hitRate)}`}
+								{hitRate === undefined ? "" : t(" · 缓存命中 {arg}", { "arg": formatPercent(hitRate) })}
 							</span>
 						</span>
 					</button>
@@ -872,7 +872,7 @@ export function Sidebar() {
 										size={14}
 									/>
 									<span className={MENU_LABEL_CLASS}>
-										{pinnedSessions.includes(shownSessionMenu.session.path) ? "取消置顶" : "置顶"}
+										{pinnedSessions.includes(shownSessionMenu.session.path) ? t("取消置顶") : t("置顶")}
 									</span>
 								</button>
 								<button
@@ -888,7 +888,7 @@ export function Sidebar() {
 									type="button"
 								>
 									<Pencil className="shrink-0" size={14} />
-									<span className={MENU_LABEL_CLASS}>重命名</span>
+									<span className={MENU_LABEL_CLASS}>{t("重命名")}</span>
 									<span className={MENU_SHORTCUT_CLASS}>Alt+Ctrl+R</span>
 								</button>
 								<button
@@ -900,7 +900,7 @@ export function Sidebar() {
 									type="button"
 								>
 									<GitFork className="shrink-0" size={14} />
-									<span className={MENU_LABEL_CLASS}>分叉（复制为新会话）</span>
+									<span className={MENU_LABEL_CLASS}>{t("分叉（复制为新会话）")}</span>
 								</button>
 								<div className={MENU_SEPARATOR_CLASS} />
 								<button
@@ -915,7 +915,7 @@ export function Sidebar() {
 									type="button"
 								>
 									<Archive className="shrink-0" size={14} />
-									<span className={MENU_LABEL_CLASS}>归档（删除会话）</span>
+									<span className={MENU_LABEL_CLASS}>{t("归档（删除会话）")}</span>
 								</button>
 							</div>
 						</>
@@ -930,7 +930,7 @@ export function Sidebar() {
 			>
 				{renameTarget ? (
 					<>
-						<div className="text-[17px] font-semibold tracking-[-0.01em] text-[#111827]">重命名会话</div>
+						<div className="text-[17px] font-semibold tracking-[-0.01em] text-[#111827]">{t("重命名会话")}</div>
 						<input
 							autoFocus
 							className="mt-4 h-10 w-full rounded-xl border border-black/[0.1] px-3 text-[14px] text-[#1f2937] outline-none focus:border-[#9fb2a5]"
@@ -938,16 +938,14 @@ export function Sidebar() {
 							onKeyDown={(event) => {
 								if (event.key === "Enter") void renameSession();
 							}}
-							placeholder="会话名称"
+							placeholder={t("会话名称")}
 							value={renameTarget.value}
 						/>
 						<div className="mt-5 flex justify-end gap-2">
 							<button className={buttonClass()} onClick={() => setRenameTarget(null)} type="button">
-								取消
-							</button>
+								{t("取消")}</button>
 							<button className={buttonClass("primary")} onClick={() => void renameSession()} type="button">
-								保存
-							</button>
+								{t("保存")}</button>
 						</div>
 					</>
 				) : null}
@@ -960,17 +958,14 @@ export function Sidebar() {
 			>
 				{archiveTarget ? (
 					<>
-						<div className="text-[17px] font-semibold tracking-[-0.01em] text-[#111827]">归档会话</div>
+						<div className="text-[17px] font-semibold tracking-[-0.01em] text-[#111827]">{t("归档会话")}</div>
 						<div className="mt-2 text-[13px] leading-6 text-[#667085]">
-							将把「{archiveTarget.title}」移出列表并移到 agent 的 archive 目录，需要时可以手动找回。
-						</div>
+							{t("将把「")}{archiveTarget.title}{t("」移出列表并移到 agent 的 archive 目录，需要时可以手动找回。")}</div>
 						<div className="mt-5 flex justify-end gap-2">
 							<button className={buttonClass()} onClick={() => setArchiveTarget(null)} type="button">
-								取消
-							</button>
+								{t("取消")}</button>
 							<button className={buttonClass("danger")} onClick={() => void archiveSession()} type="button">
-								归档
-							</button>
+								{t("归档")}</button>
 						</div>
 					</>
 				) : null}
@@ -983,11 +978,11 @@ export function Sidebar() {
 			>
 				<>
 					<div className="flex items-start justify-between gap-4">
-						<div className="text-[17px] font-semibold tracking-[-0.01em] text-[#111827]">创建项目</div>
+						<div className="text-[17px] font-semibold tracking-[-0.01em] text-[#111827]">{t("创建项目")}</div>
 						<button
 							className="flex h-7 w-7 items-center justify-center rounded-md text-[#8b95a1] hover:bg-black/[0.05]"
 							onClick={() => setProjectDialogOpen(false)}
-							title="关闭"
+							title={t("关闭")}
 							type="button"
 						>
 							<X size={15} />
@@ -999,11 +994,11 @@ export function Sidebar() {
 							autoFocus
 							className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-[#98a2b3]"
 							onChange={(event) => setProjectDraft((current) => ({ ...current, name: event.target.value }))}
-							placeholder="项目名称"
+							placeholder={t("项目名称")}
 							value={projectDraft.name}
 						/>
 					</div>
-					<div className="mt-4 text-[13px] font-medium text-[#374151]">源文件夹</div>
+					<div className="mt-4 text-[13px] font-medium text-[#374151]">{t("源文件夹")}</div>
 					<button
 						className="mt-2 flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/[0.14] py-9 text-[13px] text-[#667085] transition-colors hover:bg-black/[0.02]"
 						onClick={() => void chooseProjectFolder()}
@@ -1011,7 +1006,7 @@ export function Sidebar() {
 					>
 						<FolderPlus className="text-[#8b95a1]" size={18} />
 						<span className="max-w-[420px] truncate">
-							{projectDraft.cwd || "添加 π7 可读取和编辑的文件夹"}
+							{projectDraft.cwd || t("添加 π7 可读取和编辑的文件夹")}
 						</span>
 					</button>
 					<div className="mt-5 flex justify-end gap-2">
@@ -1020,16 +1015,14 @@ export function Sidebar() {
 							onClick={() => setProjectDialogOpen(false)}
 							type="button"
 						>
-							取消
-						</button>
+							{t("取消")}</button>
 						<button
 							className={buttonClass("primary")}
 							disabled={!projectDraft.cwd}
 							onClick={() => void createProject()}
 							type="button"
 						>
-							创建项目
-						</button>
+							{t("创建项目")}</button>
 					</div>
 				</>
 			</Modal>
@@ -1063,10 +1056,9 @@ export function Sidebar() {
 									</span>
 								</div>
 								<div className="px-3 pb-1 text-[12px] text-[#8b95a1]">
-									{activeProjectMenu.sessions.length} 个任务
-								</div>
+									{activeProjectMenu.sessions.length} {t("个任务")}</div>
 								<div className="mx-2 my-1 break-all px-1 font-mono text-[11px] text-[#98a2b3]">
-									{activeProjectMenu.cwd || "无项目路径"}
+									{activeProjectMenu.cwd || t("无项目路径")}
 								</div>
 								<div className={MENU_SEPARATOR_CLASS} />
 								<button
@@ -1081,7 +1073,7 @@ export function Sidebar() {
 										className={pinnedProjects.includes(activeProjectMenu.cwd) ? "fill-current" : ""}
 										size={16}
 									/>
-									{pinnedProjects.includes(activeProjectMenu.cwd) ? "取消置顶" : "置顶项目"}
+									{pinnedProjects.includes(activeProjectMenu.cwd) ? t("取消置顶") : t("置顶项目")}
 								</button>
 								<button
 									className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] text-[#374151] hover:bg-black/[0.04]"
@@ -1092,8 +1084,7 @@ export function Sidebar() {
 									type="button"
 								>
 									<Settings size={16} />
-									编辑项目
-								</button>
+									{t("编辑项目")}</button>
 							</div>
 						</>
 					)}
@@ -1106,7 +1097,7 @@ export function Sidebar() {
 			>
 				{editProject ? (
 					<>
-						<div className="text-[18px] font-semibold tracking-[-0.01em] text-[#111827]">编辑项目</div>
+						<div className="text-[18px] font-semibold tracking-[-0.01em] text-[#111827]">{t("编辑项目")}</div>
 						<div className="mt-1 break-all font-mono text-[11px] text-[#8b95a1]">{editProject.cwd}</div>
 						<input
 							autoFocus
@@ -1115,16 +1106,14 @@ export function Sidebar() {
 							onKeyDown={(event) => {
 								if (event.key === "Enter") saveProjectName();
 							}}
-							placeholder="项目名称"
+							placeholder={t("项目名称")}
 							value={editProject.value}
 						/>
 						<div className="mt-4 flex justify-end gap-2">
 							<button className={buttonClass()} onClick={() => setEditProject(null)} type="button">
-								取消
-							</button>
+								{t("取消")}</button>
 							<button className={buttonClass("primary")} onClick={saveProjectName} type="button">
-								保存
-							</button>
+								{t("保存")}</button>
 						</div>
 					</>
 				) : null}

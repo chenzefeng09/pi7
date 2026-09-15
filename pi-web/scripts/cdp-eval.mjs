@@ -2,7 +2,8 @@ import fs from "node:fs";
 import http from "node:http";
 import WebSocket from "ws";
 
-const CDP_ENDPOINT = "http://127.0.0.1:9222/json";
+const CDP_ENDPOINT = process.env.PI_WEB_CDP_ENDPOINT ?? "http://127.0.0.1:9222/json";
+const RENDERER_MATCH = process.env.PI_WEB_RENDERER_MATCH ?? "5173";
 const arg = process.argv[2];
 const expression = arg?.startsWith("@") ? fs.readFileSync(arg.slice(1), "utf8") : arg;
 if (!expression) { console.error("usage: node cdp-eval.mjs <expression|@file>"); process.exit(1); }
@@ -25,7 +26,7 @@ async function waitForTarget() {
 	while (Date.now() < deadline) {
 		try {
 			const targets = await getJson(CDP_ENDPOINT);
-			const page = targets.find((t) => t.type === "page" && typeof t.url === "string" && t.url.includes("5173"));
+			const page = targets.find((t) => t.type === "page" && typeof t.url === "string" && t.url.includes(RENDERER_MATCH));
 			if (page?.webSocketDebuggerUrl) return page;
 		} catch {}
 		await sleep(500);

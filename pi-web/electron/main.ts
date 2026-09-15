@@ -2,7 +2,7 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shel
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { resolvePiWin7Config } from "./bridge/config";
+import { resolvePiWin7Config, syncBundledAgentDir } from "./bridge/config";
 import { discoverModels, type DiscoveryRequest } from "./bridge/model-discovery";
 import {
 	exportModelConfig,
@@ -14,6 +14,7 @@ import {
 } from "./bridge/model-config";
 import { PiRpcClient } from "./bridge/pi-rpc-client";
 import type { PiRpcCommand, PiRuntimeInfo } from "./bridge/types";
+import { localeFromTag, setLocale, t } from "../src/i18n";
 
 let client: PiRpcClient | undefined;
 let mainWindow: BrowserWindow | undefined;
@@ -194,7 +195,11 @@ function runPiCli(args: string[]): Promise<PiCliResult> {
 	return new Promise((resolve, reject) => {
 		const child = spawn(config.nodePath, [config.cliPath, ...args], {
 			cwd: config.cwd,
-			env: { ...process.env, PI_CODING_AGENT_DIR: config.agentDir },
+			env: {
+			...process.env,
+			NODE_SKIP_PLATFORM_CHECK: "1",
+			PI_CODING_AGENT_DIR: config.agentDir,
+		},
 			stdio: ["ignore", "pipe", "pipe"],
 		});
 		let stdout = "";
@@ -249,7 +254,10 @@ function ensureClient(): PiRpcClient {
 		args: config.args,
 		cliPath: config.cliPath,
 		cwd: config.cwd,
-		env: { PI_CODING_AGENT_DIR: config.agentDir },
+		env: {
+			NODE_SKIP_PLATFORM_CHECK: "1",
+			PI_CODING_AGENT_DIR: config.agentDir,
+		},
 		nodePath: config.nodePath,
 	});
 	client.on("event", (event) => {
@@ -284,10 +292,13 @@ function attachAccelerators(window: BrowserWindow): void {
 }
 
 function createWindow(): void {
+	// Window/taskbar icon for dev and Linux: packaged Windows builds take it from the exe.
+	const iconPath = path.join(app.getAppPath(), "build", "icon.png");
 	const window = new BrowserWindow({
 		backgroundColor: "#edf4ef",
 		frame: false,
 		height: 900,
+		...(fs.existsSync(iconPath) ? { icon: iconPath } : {}),
 		minHeight: 640,
 		minWidth: 960,
 		show: false,
@@ -430,7 +441,7 @@ function resolveSessionFile(sessionPath: string): string {
 		path.isAbsolute(relative) ||
 		path.extname(resolved) !== ".jsonl"
 	) {
-		throw new Error(`非法会话路径: ${sessionPath}`);
+		throw new Error(t("非法会话路径: {sessionPath}", { "sessionPath": sessionPath }));
 	}
 	return resolved;
 }
@@ -438,7 +449,7 @@ function resolveSessionFile(sessionPath: string): string {
 ipcMain.handle("pi:rename-session", (_event, sessionPath: string, name: string) => {
 	const file = resolveSessionFile(sessionPath);
 	const sanitized = String(name).replace(/[\r\n]+/g, " ").trim();
-	if (!sanitized) throw new Error("会话名称不能为空");
+	if (!sanitized) throw new Error(t("会话名称不能为空"));
 	let parentId: string | null = null;
 	try {
 		const lines = fs.readFileSync(file, "utf8").split("\n").filter((line) => line.trim());
@@ -478,7 +489,7 @@ ipcMain.handle("pi:archive-session", (_event, sessionPath: string) => {
 ipcMain.handle("pi:choose-directory", async () => {
 	const result = await dialog.showOpenDialog({
 		properties: ["openDirectory"],
-		title: "选择文件夹",
+		title: t("选择文件夹"),
 	});
 	if (result.canceled || result.filePaths.length === 0) return undefined;
 	return result.filePaths[0];
@@ -693,7 +704,7 @@ function safeFileName(value: string): string {
 			.replace(/\s+/g, " ")
 			.trim()
 			.slice(0, 60)
-			.replace(/[. ]+$/, "") || "会话"
+			.replace(/[. ]+$/, "") || t("会话")
 	);
 }
 
@@ -704,10 +715,10 @@ ipcMain.handle("pi:pick-session-export-path", async (_event, suggestedName?: str
 	const picked = await dialog.showSaveDialog({
 		defaultPath: path.join(
 			app.getPath("documents"),
-			`π7-会话-${safeFileName(typeof suggestedName === "string" && suggestedName ? suggestedName : "新对话")}.html`,
+			t("π7-会话-{arg}.html", { "arg": safeFileName(typeof suggestedName === "string" && suggestedName ? suggestedName : t("新对话")) }),
 		),
-		filters: [{ extensions: ["html"], name: "HTML 会话导出" }],
-		title: "导出会话 HTML",
+		filters: [{ extensions: ["html"], name: t("HTML 会话导出") }],
+		title: t("导出会话 HTML"),
 	});
 	if (picked.canceled || !picked.filePath) return { canceled: true };
 	return { path: picked.filePath };
@@ -757,8 +768,8 @@ ipcMain.handle("pi:export-model-config", async (_event, filePath?: string) => {
 	if (!target) {
 		const picked = await dialog.showSaveDialog({
 			defaultPath: path.join(app.getPath("documents"), `pi-models-${new Date().toISOString().slice(0, 10)}.json`),
-			filters: [{ extensions: ["json"], name: "π7 模型配置" }],
-			title: "导出模型配置",
+			filters: [{ extensions: ["json"], name: t("π7 模型配置") }],
+			title: t("导出模型配置"),
 		});
 		if (picked.canceled || !picked.filePath) return { canceled: true };
 		target = picked.filePath;
@@ -780,9 +791,9 @@ ipcMain.handle("pi:import-model-config", async (_event, filePath?: string) => {
 	let source = typeof filePath === "string" && filePath.length > 0 ? path.resolve(filePath) : undefined;
 	if (!source) {
 		const picked = await dialog.showOpenDialog({
-			filters: [{ extensions: ["json"], name: "π7 模型配置" }],
+			filters: [{ extensions: ["json"], name: t("π7 模型配置") }],
 			properties: ["openFile"],
-			title: "导入模型配置",
+			title: t("导入模型配置"),
 		});
 		if (picked.canceled || picked.filePaths.length === 0) return { canceled: true };
 		source = picked.filePaths[0];
@@ -818,9 +829,23 @@ ipcMain.handle("pi:update-packages", async () => {
 });
 
 void app.whenReady().then(() => {
+	// The renderer detects its own locale from navigator; the main process needs the OS one.
+	setLocale(localeFromTag(app.getLocale()));
 	// Portable layout: <app root>/data/agent travels with the app folder.
 	process.env.PI_WEB_APP_ROOT =
 		process.env.PI_WEB_APP_ROOT ?? (app.isPackaged ? path.dirname(app.getPath("exe")) : app.getAppPath());
+	// The portable agent dir is the only one the installer owns: seed it from the bundled
+	// config/agent (settings, models, shipped extensions) before the first pi process starts.
+	const startupConfig = resolvePiWin7Config({
+		isPackaged: app.isPackaged,
+		resourcesPath: process.resourcesPath,
+	});
+	if (startupConfig.agentDirSource === "portable") {
+		syncBundledAgentDir(
+			path.join(process.resourcesPath, "pi-win7", "config", "agent"),
+			startupConfig.agentDir,
+		);
+	}
 	Menu.setApplicationMenu(null);
 	createWindow();
 	ensureClient();

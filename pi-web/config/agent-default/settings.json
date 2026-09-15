@@ -2,5 +2,13 @@
 	"defaultProvider": "deepseek",
 	"defaultModel": "deepseek-v4.1-flash-expires-on-0910",
 	"defaultThinkingLevel": "high",
-	"theme": "dark"
+	"theme": "dark",
+	"packages": [
+		"npm:pi-web-access",
+		"npm:pi-sub2api-provider",
+		"npm:pi-goal-x",
+		"npm:pi-plan-extension",
+		"npm:@eggmasonvalue/pi-subagent",
+		"npm:pi-todo"
+	]
 }

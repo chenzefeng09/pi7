@@ -11,6 +11,7 @@ import { ReasoningRow } from "./ReasoningRow";
 import { ToolRow } from "./ToolRow";
 import { turnCompletedAt, turnModel, turnTiming, turnUsage } from "./tail";
 import { analyzeTurn, blockKey, foldLabel, type Turn } from "./turns";
+import { t } from "../../i18n";
 
 /** Folded process disclosure: a 14px label over a hairline, chevron pointing right when closed. */
 const ProcessRow = memo(function ProcessRow({
@@ -103,7 +104,7 @@ function CopyAction({ onEdit, text }: { onEdit?: () => void; text: string }) {
 						})
 						.catch(() => {});
 				}}
-				title="复制"
+				title={t("复制")}
 				type="button"
 			>
 				{copied ? <Check className="text-success" size={15} /> : <Copy size={15} />}
@@ -112,7 +113,7 @@ function CopyAction({ onEdit, text }: { onEdit?: () => void; text: string }) {
 				<button
 					className="flex h-7 w-7 items-center justify-center rounded-full text-ink-subtle hover:bg-black/[0.05] hover:text-ink-muted"
 					onClick={onEdit}
-					title="编辑"
+					title={t("编辑")}
 					type="button"
 				>
 					<Pencil size={14} />
@@ -136,7 +137,7 @@ function MessageActions({ onClone, text }: { onClone: () => void; text: string }
 			<button
 				className="flex h-7 w-7 items-center justify-center rounded-full text-ink-subtle hover:bg-black/[0.05] hover:text-ink-muted"
 				onClick={onClone}
-				title="分支到新会话"
+				title={t("分支到新会话")}
 				type="button"
 			>
 				<GitFork size={15} />
@@ -275,15 +276,14 @@ function UserTurn({
 					/>
 					<div className="mt-1.5 flex justify-end gap-2">
 						<button className={buttonClass()} onClick={() => setDraft(null)} type="button">
-							取消
-						</button>
+							{t("取消")}</button>
 						<button
 							className={buttonClass("primary")}
 							disabled={!draft.trim() || sending}
 							onClick={() => void submit()}
 							type="button"
 						>
-							{sending ? "发送中..." : "发送"}
+							{sending ? t("发送中...") : t("发送")}
 						</button>
 					</div>
 				</div>
@@ -399,5 +399,5 @@ export const TurnView = memo(function TurnView({
  * `executing` only chooses the wording: the run is on its tools rather than on the model.
  */
 export function TurnStatus({ executing }: { executing: boolean }) {
-	return <div className="turn-status">{executing ? "正在执行…" : "正在思考…"}</div>;
+	return <div className="turn-status">{executing ? t("正在执行…") : t("正在思考…")}</div>;
 }

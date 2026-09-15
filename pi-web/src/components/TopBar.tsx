@@ -5,6 +5,7 @@ import { useUiStore } from "../state/ui";
 import { BashDialog } from "./BashDialog";
 import { MENU_PANEL_CLASS } from "./Menu";
 import { popoverOverlayClass, popoverPanelClass, Presence } from "./Presence";
+import { t } from "../i18n";
 
 export function TopBar() {
 	const [menuOpen, setMenuOpen] = useState(false);
@@ -47,10 +48,10 @@ export function TopBar() {
 		}
 		return undefined;
 	}, [messages]);
-	const rawTitle = sessionName ?? current?.firstMessage ?? firstUserText ?? "新对话";
+	const rawTitle = sessionName ?? current?.firstMessage ?? firstUserText ?? t("新对话");
 	// pi records a leading file path as the first message for a drag-and-drop turn; it reads as
 	// a filename, not as a conversation title.
-	const title = /^[A-Za-z]:[\\/]/.test(rawTitle) || rawTitle.startsWith("/") ? "新对话" : rawTitle;
+	const title = /^[A-Za-z]:[\\/]/.test(rawTitle) || rawTitle.startsWith("/") ? t("新对话") : rawTitle;
 	// A brand-new chat has nothing to name, share, or inspect yet. Codex shows no session header
 	// at all in that state, so the row only appears once the session has a name or a transcript.
 	if (blank) return null;
@@ -76,13 +77,13 @@ export function TopBar() {
 				.map((block) => (block.type === "text" ? block.text : ""))
 				.join("\n");
 			if (!text.trim()) continue;
-			lines.push(message.role === "user" ? `## 用户\n\n${text}` : `## 助手\n\n${text}`);
+			lines.push(message.role === "user" ? t("## 用户\n\n{text}", { "text": text }) : t("## 助手\n\n{text}", { "text": text }));
 		}
 		try {
 			await navigator.clipboard.writeText(lines.join("\n\n"));
-			flashFeedback("已复制");
+			flashFeedback(t("已复制"));
 		} catch {
-			flashFeedback("复制失败");
+			flashFeedback(t("复制失败"));
 		}
 		setShareOpen(false);
 	};
@@ -105,19 +106,19 @@ export function TopBar() {
 			if (typeof picker === "function") {
 				const picked = (await picker(title)) as { canceled?: boolean; path?: string } | undefined;
 				if (picked?.canceled || !picked?.path) {
-					flashFeedback("导出取消");
+					flashFeedback(t("导出取消"));
 					return;
 				}
 				target = picked.path;
 			}
 			const written = await exportHtml(target);
 			if (!written) {
-				flashFeedback("导出取消");
+				flashFeedback(t("导出取消"));
 				return;
 			}
-			flashFeedback(`已导出到 ${written}`, { path: written, sticky: true });
+			flashFeedback(t("已导出到 {written}", { "written": written }), { path: written, sticky: true });
 		} catch (error) {
-			flashFeedback(`导出失败：${error instanceof Error ? error.message : String(error)}`, { sticky: true });
+			flashFeedback(t("导出失败：{arg}", { "arg": error instanceof Error ? error.message : String(error) }), { sticky: true });
 		}
 	};
 
@@ -147,7 +148,7 @@ export function TopBar() {
 								setTitleDraft(title);
 								setEditingTitle(true);
 							}}
-							title={shortSessionId ? `${title} · 会话 ${shortSessionId}（点击重命名）` : `${title}（点击重命名）`}
+							title={shortSessionId ? t("{title} · 会话 {shortSessionId}（点击重命名）", { "title": title, "shortSessionId": shortSessionId }) : t("{title}（点击重命名）", { "title": title })}
 							type="button"
 						>
 							{title}
@@ -157,7 +158,7 @@ export function TopBar() {
 						<button
 							className="flex h-7 w-7 items-center justify-center rounded-md text-[#8b95a1] hover:bg-black/[0.05] hover:text-[#4b5563]"
 							onClick={() => setMenuOpen((value) => !value)}
-							title="更多"
+							title={t("更多")}
 							type="button"
 						>
 							<MoreHorizontal size={17} />
@@ -173,10 +174,10 @@ export function TopBar() {
 									<div className={`${MENU_PANEL_CLASS} ${popoverPanelClass(phase)} left-0 top-9 w-52`}>
 									{(
 										[
-											["分叉会话", "fork"],
-											["会话树", "tree"],
-											["会话统计", "stats"],
-											["原始记录", "entries"],
+											[t("分叉会话"), "fork"],
+											[t("会话树"), "tree"],
+											[t("会话统计"), "stats"],
+											[t("原始记录"), "entries"],
 										] as const
 									).map(([label, mode]) => (
 										<button
@@ -200,8 +201,7 @@ export function TopBar() {
 										}}
 										type="button"
 									>
-										运行 Bash
-									</button>
+										{t("运行 Bash")}</button>
 									</div>
 								</>
 							)}
@@ -221,8 +221,7 @@ export function TopBar() {
 									onClick={() => void window.pi.revealPath(shareFeedback.path ?? "")}
 									type="button"
 								>
-									打开文件夹
-								</button>
+									{t("打开文件夹")}</button>
 							) : null}
 						</span>
 					) : null}
@@ -233,8 +232,7 @@ export function TopBar() {
 							type="button"
 						>
 							<Download size={15} />
-							导出
-						</button>
+							{t("导出")}</button>
 						<Presence open={shareOpen}>
 							{({ phase }) => (
 								<>
@@ -250,16 +248,14 @@ export function TopBar() {
 											type="button"
 										>
 											<Copy size={16} />
-											复制会话内容
-										</button>
+											{t("复制会话内容")}</button>
 										<button
 											className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] text-[#374151] hover:bg-black/[0.04]"
 											onClick={() => void exportSession()}
 											type="button"
 										>
 											<Download size={16} />
-											导出会话 HTML…
-										</button>
+											{t("导出会话 HTML…")}</button>
 									</div>
 								</>
 							)}
@@ -268,7 +264,7 @@ export function TopBar() {
 					<button
 						className="flex h-8 w-8 items-center justify-center rounded-lg text-[#6b7280] hover:bg-black/[0.05]"
 						onClick={() => setSettingsOpen(true)}
-						title="设置"
+						title={t("设置")}
 						type="button"
 					>
 						<SlidersHorizontal size={17} />
@@ -278,7 +274,7 @@ export function TopBar() {
 							filePanelOpen ? "bg-black/[0.07] text-[#1f2937]" : "text-[#6b7280]"
 						}`}
 						onClick={() => setFilePanelOpen(!filePanelOpen)}
-						title="文件面板"
+						title={t("文件面板")}
 						type="button"
 					>
 						<PanelRight size={17} />

@@ -27,6 +27,7 @@ import {
 import { usePiStore, useSessionCwd } from "../state/store";
 import { useUiStore } from "../state/ui";
 import { useImageMenu } from "./ImageMenu";
+import { t } from "../i18n";
 
 const DocxPreview = lazy(() => import("./previews/DocxPreview"));
 const ExcelPreview = lazy(() => import("./previews/ExcelPreview"));
@@ -170,7 +171,7 @@ function Preview({ filePath }: { filePath: string }) {
 		const load = async () => {
 			if (isLegacyWordOrPpt || isUnsupportedOffice) {
 				setState({
-					message: "该文档格式无法在应用内预览，可用系统程序打开。",
+					message: t("该文档格式无法在应用内预览，可用系统程序打开。"),
 					status: "unsupported",
 				});
 				return;
@@ -193,7 +194,7 @@ function Preview({ filePath }: { filePath: string }) {
 				const base64 = bytes?.base64 ?? "";
 				if (disposed) return;
 				if (!base64) {
-					setState({ message: "文件内容为空或无法读取。", status: "error" });
+					setState({ message: t("文件内容为空或无法读取。"), status: "error" });
 					return;
 				}
 				if (kind === "image") {
@@ -226,7 +227,7 @@ function Preview({ filePath }: { filePath: string }) {
 	}, [filePath]);
 
 	if (state.status === "loading") {
-		return <div className="p-4 text-[12px] text-[#98a2b3]">读取中…</div>;
+		return <div className="p-4 text-[12px] text-[#98a2b3]">{t("读取中…")}</div>;
 	}
 	if (state.status === "error" || state.status === "unsupported") {
 		return <div className="p-4 text-[12px] text-[#98a2b3]">{state.message}</div>;
@@ -236,8 +237,8 @@ function Preview({ filePath }: { filePath: string }) {
 	}
 	if (state.status === "binary") {
 		return (
-			<Suspense fallback={<div className="p-4 text-[12px] text-[#98a2b3]">加载预览组件...</div>}>
-				{state.truncated ? <div className="p-3 text-[11px] text-[#b54708]">文件超过 64 MB，仅读取了前 64 MB，预览可能不完整。</div> : null}
+			<Suspense fallback={<div className="p-4 text-[12px] text-[#98a2b3]">{t("加载预览组件...")}</div>}>
+				{state.truncated ? <div className="p-3 text-[11px] text-[#b54708]">{t("文件超过 64 MB，仅读取了前 64 MB，预览可能不完整。")}</div> : null}
 				{state.kind === "pdf" ? <PdfPreview blob={state.blob} /> : null}
 				{state.kind === "word" ? <DocxPreview blob={state.blob} /> : null}
 				{state.kind === "excel" ? <ExcelPreview blob={state.blob} /> : null}
@@ -462,7 +463,7 @@ export function FilePanel() {
 					<button
 						className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#4b5563] hover:bg-black/[0.05]"
 						onClick={() => setOpenFile(undefined)}
-						title="返回文件列表"
+						title={t("返回文件列表")}
 						type="button"
 					>
 						<ArrowLeft size={14} />
@@ -489,7 +490,7 @@ export function FilePanel() {
 						setReloading(true);
 						void loadFiles().finally(() => setReloading(false));
 					}}
-					title="重新读取文件列表"
+					title={t("重新读取文件列表")}
 					type="button"
 				>
 					<RefreshCw className={reloading ? "animate-spin" : ""} size={14} />
@@ -498,7 +499,7 @@ export function FilePanel() {
 					<button
 						className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#6b7280] hover:bg-black/[0.05]"
 						onClick={() => void window.pi.openPath(`${root}/${openFile}`)}
-						title="用系统程序打开"
+						title={t("用系统程序打开")}
 						type="button"
 					>
 						<ExternalLink size={14} />
@@ -507,7 +508,7 @@ export function FilePanel() {
 				<button
 					className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#6b7280] hover:bg-black/[0.05]"
 					onClick={() => setFilePanelOpen(false)}
-					title="关闭文件面板"
+					title={t("关闭文件面板")}
 					type="button"
 				>
 					<X size={14} />
@@ -526,7 +527,7 @@ export function FilePanel() {
 							<input
 								className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-[#98a2b3]"
 								onChange={(event) => setQuery(event.target.value)}
-								placeholder="搜索文件"
+								placeholder={t("搜索文件")}
 								value={query}
 							/>
 						</div>
@@ -552,11 +553,11 @@ export function FilePanel() {
 									);
 								})}
 								{matches.length === 0 ? (
-									<li className="px-2.5 py-3 text-[12px] text-[#98a2b3]">没有匹配的文件</li>
+									<li className="px-2.5 py-3 text-[12px] text-[#98a2b3]">{t("没有匹配的文件")}</li>
 								) : null}
 							</ul>
 						) : tree.length === 0 ? (
-							<div className="px-2.5 py-3 text-[12px] text-[#98a2b3]">这个项目暂时没有可读取的文件</div>
+							<div className="px-2.5 py-3 text-[12px] text-[#98a2b3]">{t("这个项目暂时没有可读取的文件")}</div>
 						) : (
 							<TreeLevel
 								depth={0}

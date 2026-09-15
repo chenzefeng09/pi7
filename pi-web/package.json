@@ -1,7 +1,7 @@
 {
 	"name": "pi-web",
 	"private": true,
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Local desktop web UI for pi",
 	"author": "chenzefeng <chenzefeng09@users.noreply.github.com>",
 	"homepage": "https://github.com/chenzefeng09/pi7",
@@ -50,7 +50,8 @@
 					"!config/agent/logs/**",
 					"!config/agent/**/*.log",
 					"!config/agent/extensions/*-test.ts",
-					"!app/node_modules/.package-lock.json"
+					"!app/node_modules/.package-lock.json",
+					"!config/agent/npm/node_modules/.package-lock.json"
 				],
 				"from": "resources/pi-win7",
 				"to": "pi-win7"

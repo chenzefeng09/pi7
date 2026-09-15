@@ -1,5 +1,6 @@
 import { renderAsync } from "docx-preview";
 import { useEffect, useRef, useState } from "react";
+import { t } from "../../i18n";
 
 function revokeBlobUrls(container: HTMLElement): void {
 	const urls = new Set<string>();
@@ -33,7 +34,7 @@ export function DocxPreview({ blob }: { blob: Blob }): JSX.Element {
 			})
 			.catch((reason: unknown) => {
 				if (!cancelled) {
-					setError(reason instanceof Error ? reason.message : "无法渲染 DOCX 文档");
+					setError(reason instanceof Error ? reason.message : t("无法渲染 DOCX 文档"));
 					setStatus("error");
 				}
 			});
@@ -46,9 +47,9 @@ export function DocxPreview({ blob }: { blob: Blob }): JSX.Element {
 
 	return (
 		<section className="overflow-hidden rounded-lg border border-black/[0.06] bg-[#f7f7f8]">
-			<div className="border-b border-black/[0.06] px-4 py-2 text-[12px] font-medium text-[#667085]">文档预览</div>
-			{status === "loading" ? <div className="p-4 text-[12px] text-[#98a2b3]">渲染文档...</div> : null}
-			{status === "error" ? <div className="p-4 text-[12px] text-[#f04438]">文档渲染失败：{error}</div> : null}
+			<div className="border-b border-black/[0.06] px-4 py-2 text-[12px] font-medium text-[#667085]">{t("文档预览")}</div>
+			{status === "loading" ? <div className="p-4 text-[12px] text-[#98a2b3]">{t("渲染文档...")}</div> : null}
+			{status === "error" ? <div className="p-4 text-[12px] text-[#f04438]">{t("文档渲染失败：")}{error}</div> : null}
 			<div
 				className="max-h-[calc(100vh-170px)] overflow-auto bg-[#e7e9ec] px-3 py-3"
 				ref={containerRef}

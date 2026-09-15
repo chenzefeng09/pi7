@@ -1,6 +1,8 @@
 # pi web
 
-Local single-user desktop UI for pi on Windows 7.
+Local single-user desktop UI for pi on Windows 7. Chinese and English UI, following the OS locale.
+
+![π7](docs/screenshot.png)
 
 ## Releases
 
@@ -74,6 +76,19 @@ compact rows and only the answer is prose.
 arguments, streamed result, details) and is unit-tested without a DOM; the components above it
 only render what it returns.
 
+## Internationalization
+
+The UI ships Chinese and English. The language follows the OS locale — Chinese for `zh*` locales,
+English otherwise — and there is no in-app switch.
+
+- Wrap every user-facing string in `t("中文原文")` from `src/i18n`. The Chinese source text is the
+  key; `src/i18n/en.ts` maps it to English and `t()` falls back to the key when an entry is missing.
+- Interpolation uses `{name}` placeholders: `t("无法读取 {name}", { name: file.name })`.
+- The renderer detects `navigator.language`; the Electron main process calls
+  `setLocale(localeFromTag(app.getLocale()))` after `app.whenReady()`.
+- Tests run under `src/test-setup.ts`, which pins the locale to Chinese so assertions match the
+  source strings.
+
 ## Development
 
 Use Node 18 for install, typecheck, tests, and renderer builds.
@@ -107,7 +122,9 @@ node_modules\electron\dist\electron.exe scripts\ui-shot.cjs project-picker
 ```
 
 Scenarios: `chat` (default), `project-picker`. `SHOT_URL` points it at another server, `SHOT_DIR`
-at another output folder. Add a scenario when a screen needs to be reviewed repeatedly.
+at another output folder. Add a scenario when a screen needs to be reviewed repeatedly. If
+`ELECTRON_RUN_AS_NODE` is set in the environment, clear it first or `electron.exe` runs the script
+as plain Node.
 
 ## Packaging
 
@@ -123,12 +140,22 @@ resources/pi-win7/config/agent/
 The packaging filter excludes `auth.json`, sessions, logs, and other local state.
 Never commit or distribute credentials.
 
-At first run, the app uses:
+`config/agent/npm/` ships the base plugin packages (pi-subagent, pi-todo, pi-web-access,
+pi-sub2api-provider, pi-goal-x, pi-plan-extension) installed by `prepare-resources.mjs`
+with npm's default hoisted layout — the same prefix `pi install npm:<pkg>` uses, so
+shipped plugins are managed like user-installed ones. The matching `npm:` entries live in
+`config/agent-default/settings.json`. File extensions stay under `config/agent/extensions/`.
+
+At first run, the app resolves the agent dir in this order:
 
 1. `PI_CODING_AGENT_DIR`, when set.
-2. The bundled `config/agent` when it contains `auth.json`.
+2. The portable `<app root>/data/agent` when it contains `auth.json`.
 3. The user's `%USERPROFILE%\.pi\agent` when it contains `auth.json`.
-4. The bundled `config/agent` otherwise, so the UI can show the missing-auth error.
+4. The portable dir otherwise.
+
+When the portable dir wins, it is seeded from the bundled `config/agent`: top-level
+entries (including `npm/`) are copied only when missing, while bundled `extensions/`
+entries are refreshed per launch so shipped file extensions always match the app version.
 
 Build the unpacked app and ZIP:
 

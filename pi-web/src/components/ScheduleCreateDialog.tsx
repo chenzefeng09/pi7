@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { useScheduledTaskStore, type ScheduledTaskRepeat } from "../state/scheduled-tasks";
 import { Modal } from "./Modal";
+import { t } from "../i18n";
 
-const WEEKDAY_LABELS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+const WEEKDAY_LABELS = [t("周日"), t("周一"), t("周二"), t("周三"), t("周四"), t("周五"), t("周六")];
 
 const REPEAT_OPTIONS: Array<{ label: string; value: ScheduledTaskRepeat }> = [
-	{ label: "一次", value: "once" },
-	{ label: "每天", value: "daily" },
-	{ label: "每周", value: "weekly" },
+	{ label: t("一次"), value: "once" },
+	{ label: t("每天"), value: "daily" },
+	{ label: t("每周"), value: "weekly" },
 ];
 
 const FIELD_CLASS =
@@ -58,12 +59,12 @@ export function ScheduleCreateDialog({ onClose, open }: { onClose: () => void; o
 			onClose={onClose}
 			open={open}
 		>
-			<div className="text-[16px] font-medium text-[#111827]">新建定时任务</div>
-			<div className="mt-1 text-[12px] text-[#98a2b3]">任务仅在 π7 运行期间执行。</div>
+			<div className="text-[16px] font-medium text-[#111827]">{t("新建定时任务")}</div>
+			<div className="mt-1 text-[12px] text-[#98a2b3]">{t("任务仅在 π7 运行期间执行。")}</div>
 			<textarea
 				className="mt-4 h-24 w-full resize-none rounded-xl border border-black/[0.1] bg-white px-3 py-2 text-[13px] text-[#1f2937] outline-none focus:border-[#2f7df6]"
 				onChange={(event) => setPrompt(event.target.value)}
-				placeholder="输入要定时执行的内容"
+				placeholder={t("输入要定时执行的内容")}
 				value={prompt}
 			/>
 			<div className="mt-3 flex flex-wrap items-center gap-2">
@@ -118,16 +119,14 @@ export function ScheduleCreateDialog({ onClose, open }: { onClose: () => void; o
 					onClick={onClose}
 					type="button"
 				>
-					取消
-				</button>
+					{t("取消")}</button>
 				<button
 					className="rounded-full bg-[#1f2937] px-4 py-1.5 text-[13px] font-medium text-white hover:bg-[#111827] disabled:bg-[#cbd5e1]"
 					disabled={!prompt.trim()}
 					onClick={submit}
 					type="button"
 				>
-					添加任务
-				</button>
+					{t("添加任务")}</button>
 			</div>
 		</Modal>
 	);

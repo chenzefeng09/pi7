@@ -1,6 +1,7 @@
 import { Check, Copy } from "lucide-react";
 import { type MouseEvent as ReactMouseEvent, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { t } from "../i18n";
 
 /** Where the menu was opened, in viewport coordinates. */
 interface MenuAt {
@@ -55,7 +56,7 @@ export function ImageMenu({ at, onClose, src }: { at: MenuAt; onClose: () => voi
 				type="button"
 			>
 				{copied ? <Check className="text-[#16a34a]" size={14} /> : <Copy size={14} />}
-				{copied ? "已复制" : "复制图片"}
+				{copied ? t("已复制") : t("复制图片")}
 			</button>
 		</div>,
 		document.body,

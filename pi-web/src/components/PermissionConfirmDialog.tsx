@@ -2,6 +2,7 @@ import { AlertCircle, Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { buttonClass } from "./buttons";
 import { Modal } from "./Modal";
+import { t } from "../i18n";
 
 /**
  * Confirmation for handing pi the full-permission mode.
@@ -35,12 +36,11 @@ export function PermissionConfirmDialog({
 			open={open}
 		>
 			<>
-				<div className="text-[17px] font-semibold tracking-[-0.01em] text-[#111827]">确认启用完全权限？</div>
+				<div className="text-[17px] font-semibold tracking-[-0.01em] text-[#111827]">{t("确认启用完全权限？")}</div>
 				<div className="mt-4 flex gap-3">
 					<AlertCircle className="mt-0.5 shrink-0 text-[#f04438]" size={20} />
 					<div className="text-[13px] leading-5 text-[#475467]">
-						启用完全权限后，智能体将减少确认步骤，并且可以直接执行更多操作，包括敏感操作、文件修改或外部命令。仅建议在你信任当前任务时使用。
-					</div>
+						{t("启用完全权限后，智能体将减少确认步骤，并且可以直接执行更多操作，包括敏感操作、文件修改或外部命令。仅建议在你信任当前任务时使用。")}</div>
 				</div>
 				<label className="mt-5 flex cursor-pointer items-center gap-2.5 text-[13px] text-[#1f2937]">
 					<input
@@ -52,20 +52,17 @@ export function PermissionConfirmDialog({
 					<span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border border-black/[0.2] bg-white transition-colors peer-checked:border-[#2f7df6] peer-checked:bg-[#2f7df6] peer-focus-visible:ring-2 peer-focus-visible:ring-[#2f7df6]/40">
 						{acknowledged ? <Check className="text-white" size={12} /> : null}
 					</span>
-					我已了解风险，并愿意继续
-				</label>
+					{t("我已了解风险，并愿意继续")}</label>
 				<div className="mt-6 flex justify-end gap-2">
 					<button className={buttonClass()} onClick={onCancel} type="button">
-						取消
-					</button>
+						{t("取消")}</button>
 					<button
 						className={buttonClass("primary")}
 						disabled={!acknowledged}
 						onClick={onConfirm}
 						type="button"
 					>
-						启用完全权限
-					</button>
+						{t("启用完全权限")}</button>
 				</div>
 			</>
 		</Modal>

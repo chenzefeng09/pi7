@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { SessionInfo } from "./types";
+import { t } from "../i18n";
 
 const PROJECT_LABELS_KEY = "pi-web.project-labels";
 const PROJECT_ORDER_KEY = "pi-web.project-order";
@@ -187,17 +188,17 @@ export function reorderSessions({
 }
 
 export function defaultProjectName(cwd: string | undefined): string {
-	if (!cwd) return "无项目";
+	if (!cwd) return t("无项目");
 	const normalized = cwd.replace(/\\/g, "/").replace(/\/$/, "");
 	// A bare home folder is where sessions without a project land; naming it after the user's
 	// account folder collides with real projects that share that name.
-	if (/^[A-Za-z]:\/Users\/[^/]+$/.test(normalized) || /^\/(home|Users)\/[^/]+$/.test(normalized)) return "主目录";
+	if (/^[A-Za-z]:\/Users\/[^/]+$/.test(normalized) || /^\/(home|Users)\/[^/]+$/.test(normalized)) return t("主目录");
 	const name = normalized.split("/").at(-1) || normalized;
 	return /^\d+$/.test(name) ? "pi" : name;
 }
 
 export function projectName(cwd: string | undefined, labels: Record<string, string>): string {
-	if (!cwd) return "无项目";
+	if (!cwd) return t("无项目");
 	return labels[cwd] ?? defaultProjectName(cwd);
 }
 

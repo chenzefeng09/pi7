@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { sessionTodos } from "../lib/todos";
 import { useBlankSession, usePiStore } from "../state/store";
 import type { TodoItem } from "../state/types";
+import { t } from "../i18n";
 
 /** Status mark of one row, the harness todo list's vocabulary. */
 function StatusMark({ status }: { status: TodoItem["status"] }) {
@@ -17,10 +18,10 @@ function StatusMark({ status }: { status: TodoItem["status"] }) {
 function summaryOf(items: TodoItem[]): string {
 	const count = (status: TodoItem["status"]) => items.filter((item) => item.status === status).length;
 	const parts = [
-		[count("in-progress"), "进行中"],
-		[count("pending"), "待处理"],
-		[count("blocked"), "受阻"],
-		[count("done"), "已完成"],
+		[count("in-progress"), t("进行中")],
+		[count("pending"), t("待处理")],
+		[count("blocked"), t("受阻")],
+		[count("done"), t("已完成")],
 	] as const;
 	return parts
 		.filter(([value]) => value > 0)
@@ -50,11 +51,11 @@ export function TodoPanel() {
 				<button
 					className="flex h-9 w-full items-center gap-2.5 px-3 text-left"
 					onClick={() => setOpen((value) => !value)}
-					title={open ? "收起任务列表" : "展开任务列表"}
+					title={open ? t("收起任务列表") : t("展开任务列表")}
 					type="button"
 				>
 					<ListTodo className="shrink-0 text-[#8a938c]" size={15} />
-					<span className="shrink-0 text-[13px] font-medium text-[#1f2937]">任务</span>
+					<span className="shrink-0 text-[13px] font-medium text-[#1f2937]">{t("任务")}</span>
 					<span className="min-w-0 flex-1 truncate text-[12px] text-[#8a938c]">{summary}</span>
 					<ChevronDown
 						className={`shrink-0 text-[#8a938c] transition-transform ${open ? "" : "-rotate-90"}`}
@@ -78,14 +79,14 @@ export function TodoPanel() {
 												item.priority === "critical" ? "text-[#f04438]" : "text-[#f79009]"
 											}`}
 										>
-											{item.priority === "critical" ? "紧急" : "重要"}
+											{item.priority === "critical" ? t("紧急") : t("重要")}
 										</span>
 									) : null}
 									{item.assignee ? (
 										<span className="ml-1.5 text-[11px] text-[#b6bcc4]">· {item.assignee}</span>
 									) : null}
 									{item.blockedBy ? (
-										<span className="ml-1.5 text-[11px] text-[#f04438]">受阻于 {item.blockedBy}</span>
+										<span className="ml-1.5 text-[11px] text-[#f04438]">{t("受阻于")}{item.blockedBy}</span>
 									) : null}
 								</span>
 								<span className="shrink-0 pt-0.5 font-mono text-[11px] text-[#c0c6cd]">{item.id}</span>

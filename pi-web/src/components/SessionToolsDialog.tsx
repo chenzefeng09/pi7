@@ -5,6 +5,7 @@ import type { SessionToolMode } from "../state/ui";
 import { buttonClass } from "./buttons";
 import { Modal } from "./Modal";
 import { cacheHitRate, formatPercent, formatTokens } from "./usage";
+import { t } from "../i18n";
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
 	return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -29,17 +30,17 @@ function entrySummary(node: SessionTreeNode): { detail: string; title: string } 
 		const message = asRecord(entry.message);
 		const role = typeof message?.role === "string" ? message.role : "message";
 		const text = contentText(message?.content).trim().replace(/\s+/g, " ");
-		const roleLabel = role === "user" ? "用户" : role === "assistant" ? "助手" : role;
+		const roleLabel = role === "user" ? t("用户") : role === "assistant" ? t("助手") : role;
 		return {
 			detail: text.slice(0, 180) || entry.id,
 			title: node.label ?? roleLabel,
 		};
 	}
 	if (entry.type === "compaction") {
-		return { detail: "上下文已压缩", title: node.label ?? "压缩" };
+		return { detail: t("上下文已压缩"), title: node.label ?? t("压缩") };
 	}
 	if (entry.type === "branch_summary") {
-		return { detail: "分支摘要", title: node.label ?? "分支摘要" };
+		return { detail: t("分支摘要"), title: node.label ?? t("分支摘要") };
 	}
 	return { detail: entry.id, title: node.label ?? entry.type };
 }
@@ -61,8 +62,7 @@ function TreeBranch({ node, onFork }: { node: SessionTreeNode; onFork: (entryId:
 							onClick={() => onFork(node.entry.id)}
 							type="button"
 						>
-							分叉
-						</button>
+							{t("分叉")}</button>
 					) : null}
 				</div>
 			</div>
@@ -121,12 +121,12 @@ export function SessionToolsDialog({
 
 	const title =
 		active === "fork"
-			? "分叉会话"
+			? t("分叉会话")
 			: active === "tree"
-				? "会话树"
+				? t("会话树")
 				: active === "entries"
-					? "会话记录"
-					: "会话统计";
+					? t("会话记录")
+					: t("会话统计");
 
 	return (
 		<Modal
@@ -142,8 +142,7 @@ export function SessionToolsDialog({
 						onClick={onClose}
 						type="button"
 					>
-						关闭
-					</button>
+						{t("关闭")}</button>
 				</div>
 				<div className="overflow-y-auto p-5">
 					{active === "fork" ? (
@@ -163,12 +162,11 @@ export function SessionToolsDialog({
 										}
 										type="button"
 									>
-										从此处分叉
-									</button>
+										{t("从此处分叉")}</button>
 								</div>
 							))}
 							{forkMessages.length === 0 ? (
-								<div className="py-8 text-center text-sm text-ink-faint">暂无可分叉的用户消息。</div>
+								<div className="py-8 text-center text-sm text-ink-faint">{t("暂无可分叉的用户消息。")}</div>
 							) : null}
 							<button
 								className={`mt-4 w-full ${buttonClass()}`}
@@ -179,8 +177,7 @@ export function SessionToolsDialog({
 								}
 								type="button"
 							>
-								克隆当前分支
-							</button>
+								{t("克隆当前分支")}</button>
 						</div>
 					) : null}
 					{active === "tree" ? (
@@ -197,7 +194,7 @@ export function SessionToolsDialog({
 								/>
 							))}
 							{sessionTree.length === 0 ? (
-								<div className="py-8 text-center text-sm text-ink-faint">会话树为空。</div>
+								<div className="py-8 text-center text-sm text-ink-faint">{t("会话树为空。")}</div>
 							) : null}
 						</div>
 					) : null}
@@ -212,23 +209,23 @@ export function SessionToolsDialog({
 								<>
 									<div className="grid grid-cols-2 gap-2 text-sm">
 										<div className="rounded-lg border border-line p-3">
-											<div className="text-xs text-ink-faint">消息数</div>
+											<div className="text-xs text-ink-faint">{t("消息数")}</div>
 											<div>{sessionStats.totalMessages}</div>
 										</div>
 										<div className="rounded-lg border border-line p-3">
-											<div className="text-xs text-ink-faint">工具调用</div>
+											<div className="text-xs text-ink-faint">{t("工具调用")}</div>
 											<div>{sessionStats.toolCalls}</div>
 										</div>
 										<div className="rounded-lg border border-line p-3">
-											<div className="text-xs text-ink-faint">Token 数</div>
+											<div className="text-xs text-ink-faint">{t("Token 数")}</div>
 											<div>{sessionStats.tokens.total.toLocaleString()}</div>
 										</div>
 										<div className="rounded-lg border border-line p-3">
-											<div className="text-xs text-ink-faint">上下文</div>
+											<div className="text-xs text-ink-faint">{t("上下文")}</div>
 											<div>
 												{sessionStats.contextUsage?.percent === null ||
 												sessionStats.contextUsage?.percent === undefined
-													? "未知"
+													? t("未知")
 													: `${sessionStats.contextUsage.percent.toFixed(1)}%`}
 											</div>
 										</div>
@@ -237,47 +234,47 @@ export function SessionToolsDialog({
 									    went, and how much of the prompt never had to be processed fresh. */}
 									<div className="rounded-lg border border-line p-3">
 										<div className="flex items-baseline justify-between text-sm">
-											<span className="font-medium text-ink">Token 用量</span>
+											<span className="font-medium text-ink">{t("Token 用量")}</span>
 											<span className="font-semibold">
 												{sessionStats.tokens.total.toLocaleString()} tok
 											</span>
 										</div>
 										<dl className="mt-3 space-y-1.5 border-t border-line pt-3 text-[13px]">
 											<TokenRow
-												label="缓存命中"
+												label={t("缓存命中")}
 												value={
 													hitRate === undefined ? "—" : formatPercent(hitRate)
 												}
 											/>
 											<TokenRow
-												label="未缓存输入"
+												label={t("未缓存输入")}
 												value={`${sessionStats.tokens.input.toLocaleString()} tok`}
 											/>
 											<TokenRow
-												label="缓存读取"
+												label={t("缓存读取")}
 												value={`${sessionStats.tokens.cacheRead.toLocaleString()} tok`}
 											/>
 											<TokenRow
-												label="缓存写入"
+												label={t("缓存写入")}
 												value={`${sessionStats.tokens.cacheWrite.toLocaleString()} tok`}
 											/>
 											<TokenRow
-												label="输出"
+												label={t("输出")}
 												value={`${sessionStats.tokens.output.toLocaleString()} tok`}
 											/>
 											<TokenRow
-												label="上下文窗口"
+												label={t("上下文窗口")}
 												value={
 													sessionStats.contextUsage
 														? `${formatTokens(sessionStats.contextUsage.tokens ?? 0)} / ${formatTokens(sessionStats.contextUsage.contextWindow)}`
-														: "未知"
+														: t("未知")
 												}
 											/>
 										</dl>
 									</div>
 								</>
 							) : (
-								<div className="text-sm text-ink-faint">正在加载统计...</div>
+								<div className="text-sm text-ink-faint">{t("正在加载统计...")}</div>
 							)}
 						</div>
 					) : null}

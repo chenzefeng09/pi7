@@ -25,16 +25,17 @@ import { Presence } from "./Presence";
 import { ProjectPicker } from "./ProjectPicker";
 import { QueueDock } from "./QueueDock";
 import { TodoPanel } from "./TodoPanel";
+import { t } from "../i18n";
 
 function readImage(file: File): Promise<ImageAttachment> {
 	return new Promise((resolve, reject) => {
 		const reader = new FileReader();
-		reader.onerror = () => reject(reader.error ?? new Error(`无法读取 ${file.name}`));
+		reader.onerror = () => reject(reader.error ?? new Error(t("无法读取 {name}", { "name": file.name })));
 		reader.onload = () => {
 			const result = typeof reader.result === "string" ? reader.result : "";
 			const comma = result.indexOf(",");
 			if (comma < 0) {
-				reject(new Error(`无法读取 ${file.name}`));
+				reject(new Error(t("无法读取 {name}", { "name": file.name })));
 				return;
 			}
 			resolve({
@@ -63,6 +64,9 @@ export function Composer() {
 	const recallId = usePiStore((state) => state.recallId);
 	const files = usePiStore((state) => state.files);
 	const filesRoot = usePiStore((state) => state.filesRoot);
+	const model = usePiStore((state) => state.model);
+	const models = usePiStore((state) => state.models);
+	const modelsLoaded = usePiStore((state) => state.modelsLoaded);
 	const queue = usePiStore((state) => state.queue);
 	const sessionProject = usePiStore((state) => state.sessionProject);
 	const status = usePiStore((state) => state.status);
@@ -98,7 +102,9 @@ export function Composer() {
 	const showCommandSuggestions = suggestions.length > 0 && fileQuery === undefined;
 	const showFileSuggestions = fileSuggestions.length > 0;
 	const queuedCount = queue.steering.length + queue.followUp.length;
-	const canSend = workspaceSelected && (Boolean(text.trim()) || attachments.length > 0 || fileAttachments.length > 0);
+	// Nothing to send with before a model exists; the setup banner says how to fix it.
+	const noModel = modelsLoaded && models.length === 0 && !model;
+	const canSend = !noModel && workspaceSelected && (Boolean(text.trim()) || attachments.length > 0 || fileAttachments.length > 0);
 
 	useEffect(() => {
 		// `recallId` is in the dependency list on purpose: staging the same text twice (recalling the
@@ -183,8 +189,13 @@ export function Composer() {
 	};
 
 	const submit = async (streamingBehavior?: "followUp" | "steer") => {
+		if (noModel) {
+			// Enter bypasses the disabled button; resurface the guide instead of failing silently.
+			useUiStore.getState().setModelSetupDismissed(false);
+			return;
+		}
 		if (!workspaceSelected) {
-			usePiStore.setState({ error: "请先选择工作区，再开始会话。" });
+			usePiStore.setState({ error: t("请先选择工作区，再开始会话。") });
 			return;
 		}
 		const payload = await buildPrompt(text);
@@ -232,7 +243,7 @@ export function Composer() {
 
 	const armGoalMode = async () => {
 		if (!workspaceSelected) {
-			usePiStore.setState({ error: "请先选择工作区，再开始会话。" });
+			usePiStore.setState({ error: t("请先选择工作区，再开始会话。") });
 			return;
 		}
 		setAddMenuOpen(false);
@@ -246,7 +257,7 @@ export function Composer() {
 
 	const enterPlanMode = async () => {
 		if (!workspaceSelected) {
-			usePiStore.setState({ error: "请先选择工作区，再开始会话。" });
+			usePiStore.setState({ error: t("请先选择工作区，再开始会话。") });
 			return;
 		}
 		setAddMenuOpen(false);
@@ -277,7 +288,7 @@ export function Composer() {
 				<button
 					className="absolute -top-5 left-1/2 z-10 grid h-9 w-9 -translate-x-1/2 place-items-center rounded-full border border-black/[0.08] bg-white text-[#4b5563] shadow-[0_4px_14px_rgba(15,23,42,0.12)] transition-colors hover:bg-black/[0.03]"
 					onClick={() => useUiStore.getState().requestJumpToBottom()}
-					title="滚动到底部"
+					title={t("滚动到底部")}
 					type="button"
 				>
 					<ArrowDown size={16} />
@@ -346,7 +357,7 @@ export function Composer() {
 						className={`${MENU_PANEL_CLASS} bottom-[calc(100%+10px)] left-0 max-h-[380px] w-[340px] overflow-y-auto`}
 						ref={addMenuRef}
 					>
-						<div className="px-2.5 pb-0.5 pt-1 text-[11px] font-medium text-[#8b95a1]">添加</div>
+						<div className="px-2.5 pb-0.5 pt-1 text-[11px] font-medium text-[#8b95a1]">{t("添加")}</div>
 						<button
 							className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1 text-left hover:bg-black/[0.05]"
 							onClick={() => {
@@ -356,7 +367,7 @@ export function Composer() {
 							type="button"
 						>
 							<Paperclip className="shrink-0 text-[#667085]" size={14} />
-							<span className="text-[13px] font-medium text-[#1f2937]">文件和文件夹</span>
+							<span className="text-[13px] font-medium text-[#1f2937]">{t("文件和文件夹")}</span>
 						</button>
 						<button
 							className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1 text-left hover:bg-black/[0.05]"
@@ -364,8 +375,8 @@ export function Composer() {
 							type="button"
 						>
 							<Target className="shrink-0 text-[#667085]" size={14} />
-							<span className="shrink-0 text-[13px] font-medium text-[#1f2937]">目标</span>
-							<span className="min-w-0 flex-1 truncate text-[11px] text-[#98a2b3]">用会话框内容作为目标</span>
+							<span className="shrink-0 text-[13px] font-medium text-[#1f2937]">{t("目标")}</span>
+							<span className="min-w-0 flex-1 truncate text-[11px] text-[#98a2b3]">{t("用会话框内容作为目标")}</span>
 						</button>
 						<button
 							className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1 text-left hover:bg-black/[0.05]"
@@ -373,14 +384,14 @@ export function Composer() {
 							type="button"
 						>
 							<Compass className="shrink-0 text-[#667085]" size={14} />
-							<span className="shrink-0 text-[13px] font-medium text-[#1f2937]">计划模式</span>
+							<span className="shrink-0 text-[13px] font-medium text-[#1f2937]">{t("计划模式")}</span>
 							<span className="min-w-0 flex-1 truncate text-[11px] text-[#98a2b3]">
-								{planMode ? "已开启（/plan）" : "只读探索，先出计划"}
+								{planMode ? t("已开启（/plan）") : t("只读探索，先出计划")}
 							</span>
 						</button>
 						{commands.length > 0 ? (
 							<>
-								<div className="px-2.5 pb-0.5 pt-2 text-[11px] font-medium text-[#8b95a1]">插件</div>
+								<div className="px-2.5 pb-0.5 pt-2 text-[11px] font-medium text-[#8b95a1]">{t("插件")}</div>
 								{commands.slice(0, 12).map((command) => (
 									<button
 										className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1 text-left hover:bg-black/[0.05]"
@@ -453,7 +464,7 @@ export function Composer() {
 										onClick={() =>
 											setAttachments((current) => current.filter((_item, itemIndex) => itemIndex !== index))
 										}
-										title="移除"
+										title={t("移除")}
 										type="button"
 									>
 										<X size={11} />
@@ -535,11 +546,11 @@ export function Composer() {
 						placeholder={
 							busy
 								? queuedCount > 0
-									? "Ctrl+Enter 插话发送全部排队消息"
-									: "输入后续消息..."
+									? t("Ctrl+Enter 插话发送全部排队消息")
+									: t("输入后续消息...")
 								: goalArmed
-									? "描述你的目标，定义可衡量的成果，以获得最佳效果"
-									: "随心输入"
+									? t("描述你的目标，定义可衡量的成果，以获得最佳效果")
+									: t("随心输入")
 						}
 						ref={textareaRef}
 						rows={1}
@@ -551,7 +562,7 @@ export function Composer() {
 								addMenuOpen ? "bg-black/[0.08]" : "hover:bg-black/[0.05]"
 							}`}
 							onClick={() => setAddMenuOpen((value) => !value)}
-							title="添加"
+							title={t("添加")}
 							type="button"
 						>
 							<Plus size={18} />
@@ -562,26 +573,26 @@ export function Composer() {
 							<button
 								className="group flex shrink-0 items-center rounded-full bg-black/[0.06] py-[3px] pl-2.5 pr-2.5 text-[12px] text-[#667085] transition-colors hover:bg-black/[0.1] group-hover:pl-[3px] hover:pl-[3px]"
 								onClick={() => void exitGoalMode()}
-								title={goal ? `目标模式：${goal}` : "目标模式：发送的内容将作为目标"}
+								title={goal ? t("目标模式：{goal}", { "goal": goal }) : t("目标模式：发送的内容将作为目标")}
 								type="button"
 							>
 								<span className="flex h-4 w-0 items-center justify-center overflow-hidden rounded-full bg-[#b9bec7] text-white opacity-0 transition-all duration-150 group-hover:w-4 group-hover:opacity-100">
 									<X size={10} strokeWidth={3} />
 								</span>
-								<span className="transition-all duration-150 group-hover:pl-1.5">目标</span>
+								<span className="transition-all duration-150 group-hover:pl-1.5">{t("目标")}</span>
 							</button>
 						) : null}
 						{planMode ? (
 							<button
 								className="group flex shrink-0 items-center rounded-full bg-black/[0.06] py-[3px] pl-2.5 pr-2.5 text-[12px] text-[#667085] transition-colors hover:bg-black/[0.1] hover:pl-[3px]"
 								onClick={() => void exitPlanMode()}
-								title="计划模式（点击退出）"
+								title={t("计划模式（点击退出）")}
 								type="button"
 							>
 								<span className="flex h-4 w-0 items-center justify-center overflow-hidden rounded-full bg-[#b9bec7] text-white opacity-0 transition-all duration-150 group-hover:w-4 group-hover:opacity-100">
 									<X size={10} strokeWidth={3} />
 								</span>
-								<span className="transition-all duration-150 group-hover:pl-1.5">计划模式</span>
+								<span className="transition-all duration-150 group-hover:pl-1.5">{t("计划模式")}</span>
 							</button>
 						) : null}
 						<div className="min-w-0 flex-1" />
@@ -592,7 +603,7 @@ export function Composer() {
 								<button
 									className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1f2937] text-white hover:bg-black"
 									onClick={() => void abort()}
-									title="停止"
+									title={t("停止")}
 									type="button"
 								>
 									<Square size={12} />
@@ -601,7 +612,7 @@ export function Composer() {
 								<button
 									className="flex h-8 w-8 cursor-default items-center justify-center rounded-full bg-[#eef1f4] text-[#9aa3ad]"
 									disabled
-									title="正在初始化"
+									title={t("正在初始化")}
 									type="button"
 								>
 									<Loader2 className="animate-spin" size={16} />
@@ -615,7 +626,7 @@ export function Composer() {
 									}`}
 									disabled={!canSend}
 									onClick={() => void submit()}
-									title="发送"
+									title={noModel ? t("配置模型后即可发送") : t("发送")}
 									type="button"
 								>
 									<ArrowUp size={16} />

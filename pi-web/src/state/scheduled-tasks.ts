@@ -1,5 +1,6 @@
 ﻿import { create } from "zustand";
 import { hasWorkspaceForPrompt, usePiStore } from "./store";
+import { t } from "../i18n";
 
 export type ScheduledTaskStatus = "pending" | "running" | "paused" | "completed" | "error";
 export type ScheduledTaskRepeat = "once" | "daily" | "weekly";
@@ -252,8 +253,8 @@ export async function runScheduledTask(id: string): Promise<void> {
 	const task = useScheduledTaskStore.getState().tasks.find((item) => item.id === id);
 	if (!task || task.status !== "pending") return;
 	if (!task.project && !hasWorkspaceForPrompt(usePiStore.getState())) {
-		useScheduledTaskStore.getState().updateTask(id, { status: "paused", error: "请先选择工作区" });
-		pushNotification(`定时任务「${task.prompt.split("\n")[0].slice(0, 40)}」已暂停：请先选择工作区`, "error");
+		useScheduledTaskStore.getState().updateTask(id, { status: "paused", error: t("请先选择工作区") });
+		pushNotification(t("定时任务「{arg}」已暂停：请先选择工作区", { "arg": task.prompt.split("\n")[0].slice(0, 40) }), "error");
 		return;
 	}
 	runningTasks.add(id);
@@ -301,7 +302,7 @@ export async function runScheduledTask(id: string): Promise<void> {
 		while (Date.now() < deadline) {
 			if (taskRunGenerations.get(id) !== runGeneration) return;
 			const view = taskSessionView(taskHandle);
-			if (view.gone) throw new Error("任务会话已关闭");
+			if (view.gone) throw new Error(t("任务会话已关闭"));
 			// A dead process never sends agent_settled, so the run would look busy forever.
 			if (usePiStore.getState().connectionError) throw new Error(usePiStore.getState().connectionError);
 			if (view.status === "streaming") sawStreaming = true;
@@ -311,21 +312,21 @@ export async function runScheduledTask(id: string): Promise<void> {
 		}
 		if (taskRunGenerations.get(id) !== runGeneration) return;
 		const settled = taskSessionView(taskHandle);
-		if (Date.now() >= deadline) throw new Error("任务执行超时");
+		if (Date.now() >= deadline) throw new Error(t("任务执行超时"));
 		// The run's outcome lives on the last assistant message, not on the session status:
 		// agent_settled lands as "idle" even when the turn ended in an error, and the visible
 		// status may belong to another session entirely.
 		const lastAssistant = [...settled.messages].reverse().find((message) => message.role === "assistant");
 		const produced = lastAssistant !== undefined && lastAssistant.id !== lastAssistantBefore;
 		if (settled.status === "error" || (produced && lastAssistant.state === "error")) {
-			throw new Error(settled.error ?? lastAssistantText(settled) ?? "任务执行失败");
+			throw new Error(settled.error ?? lastAssistantText(settled) ?? t("任务执行失败"));
 		}
 		if (produced && lastAssistant.state === "aborted") {
-			useScheduledTaskStore.getState().updateTask(id, { status: "paused", error: "已手动停止" });
+			useScheduledTaskStore.getState().updateTask(id, { status: "paused", error: t("已手动停止") });
 			return;
 		}
 		if (usePiStore.getState().abortGeneration !== abortGeneration) {
-			useScheduledTaskStore.getState().updateTask(id, { status: "paused", error: "已手动停止" });
+			useScheduledTaskStore.getState().updateTask(id, { status: "paused", error: t("已手动停止") });
 			return;
 		}
 		const completedAt = new Date().toISOString();
@@ -339,16 +340,16 @@ export async function runScheduledTask(id: string): Promise<void> {
 				status: "pending",
 			});
 		}
-		if (task.notify === "all") pushNotification(`定时任务「${title}」已完成`, "info");
+		if (task.notify === "all") pushNotification(t("定时任务「{title}」已完成", { "title": title }), "info");
 	} catch (error) {
 		if (taskRunGenerations.get(id) !== runGeneration) return;
 		if (usePiStore.getState().abortGeneration !== abortGeneration) {
-			useScheduledTaskStore.getState().updateTask(id, { status: "paused", error: "已手动停止" });
+			useScheduledTaskStore.getState().updateTask(id, { status: "paused", error: t("已手动停止") });
 			return;
 		}
 		const message = error instanceof Error ? error.message : String(error);
 		useScheduledTaskStore.getState().updateTask(id, { error: message, status: "error" });
-		pushNotification(`定时任务「${title}」失败：${message}`, "error");
+		pushNotification(t("定时任务「{title}」失败：{message}", { "title": title, "message": message }), "error");
 	} finally {
 		runningTasks.delete(id);
 		taskHandles.delete(id);
@@ -361,7 +362,7 @@ export function pauseScheduledTask(id: string): void {
 	const task = useScheduledTaskStore.getState().tasks.find((item) => item.id === id);
 	if (!task || task.status !== "running") return;
 	invalidateTaskRun(id);
-	useScheduledTaskStore.getState().updateTask(id, { status: "paused", error: "已手动暂停" });
+	useScheduledTaskStore.getState().updateTask(id, { status: "paused", error: t("已手动暂停") });
 	// The task's own handle is aborted, not whatever happens to be on screen.
 	void usePiStore.getState().abort(taskHandles.get(id)).catch(() => {});
 }

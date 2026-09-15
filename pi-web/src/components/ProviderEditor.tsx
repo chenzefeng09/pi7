@@ -2,6 +2,7 @@ import { Check, ChevronDown, Download, Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { buttonClass } from "./buttons";
 import { SETTINGS_INPUT_CLASS, SettingsSelect } from "./SettingsControls";
+import { t } from "../i18n";
 
 /** One model of a provider, with the fields pi's `models.json` accepts per model. */
 export interface ModelDraft {
@@ -170,7 +171,7 @@ export function ProviderEditor({
 			} else {
 				setDiscovered(result?.models ?? []);
 				setPicked(new Set());
-				setDiscoveryNote(`从 ${result?.url ?? ""} 读到 ${String(result?.models?.length ?? 0)} 个模型`);
+				setDiscoveryNote(t("从 {arg} 读到 {arg2} 个模型", { "arg": result?.url ?? "", "arg2": String(result?.models?.length ?? 0) }));
 			}
 		} catch (error) {
 			setDiscoveryNote(error instanceof Error ? error.message : String(error));
@@ -193,7 +194,7 @@ export function ProviderEditor({
 			}));
 		patch({ models: [...draft.models, ...additions] });
 		setDiscovered(undefined);
-		setDiscoveryNote(`已加入 ${String(additions.length)} 个模型，按需再改上下文与采样参数`);
+		setDiscoveryNote(t("已加入 {arg} 个模型，按需再改上下文与采样参数", { "arg": String(additions.length) }));
 	};
 
 	return (
@@ -201,16 +202,15 @@ export function ProviderEditor({
 			<div className="flex shrink-0 items-start justify-between gap-2 pb-2 pl-5 pr-3 pt-4">
 				<div className="flex min-w-0 flex-col">
 					<span className="text-[16px] font-medium leading-6 text-[#111827]">
-						{editing ? "编辑供应商" : "新增供应商"}
+						{editing ? t("编辑供应商") : t("新增供应商")}
 					</span>
 					<span className="text-[12px] text-[#98a2b3]">
-						模型写在 agent 配置目录的 <span className="font-mono">models.json</span>，保存后重启运行时生效
-					</span>
+						{t("模型写在 agent 配置目录的")}<span className="font-mono">models.json</span>{t("，保存后重启运行时生效")}</span>
 				</div>
 				<button
 					className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#6b7280] hover:bg-black/[0.05]"
 					onClick={onCancel}
-					title="关闭"
+					title={t("关闭")}
 					type="button"
 				>
 					<X size={15} />
@@ -219,7 +219,7 @@ export function ProviderEditor({
 
 			<div className="scrollbar-subtle flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 pb-4">
 				<div className="grid grid-cols-2 gap-3">
-					<Field label="id（如 vllm）">
+					<Field label={t("id（如 vllm）")}>
 						<input
 							className={SETTINGS_INPUT_CLASS}
 							onChange={(event) => patch({ id: event.target.value })}
@@ -227,15 +227,15 @@ export function ProviderEditor({
 							value={draft.id}
 						/>
 					</Field>
-					<Field label="名称（可选）">
+					<Field label={t("名称（可选）")}>
 						<input
 							className={SETTINGS_INPUT_CLASS}
 							onChange={(event) => patch({ name: event.target.value })}
-							placeholder="本地 vLLM"
+							placeholder={t("本地 vLLM")}
 							value={draft.name}
 						/>
 					</Field>
-					<Field label="baseUrl（如 http://127.0.0.1:8000/v1）">
+					<Field label={t("baseUrl（如 http://127.0.0.1:8000/v1）")}>
 						<input
 							className={SETTINGS_INPUT_CLASS}
 							onChange={(event) => patch({ baseUrl: event.target.value })}
@@ -249,12 +249,12 @@ export function ProviderEditor({
 							block
 							onChange={(api) => patch({ api })}
 							options={API_KINDS.map((kind) => ({ label: kind, value: kind }))}
-							title="选择 api 类型"
+							title={t("选择 api 类型")}
 							value={draft.api}
 						/>
 					</Field>
 				</div>
-				<Field label={editing ? "apiKey（留空沿用已保存的密钥）" : "apiKey（$ENV 或 !命令；本地服务可留空）"}>
+				<Field label={editing ? t("apiKey（留空沿用已保存的密钥）") : t("apiKey（$ENV 或 !命令；本地服务可留空）")}>
 					<input
 						className={SETTINGS_INPUT_CLASS}
 						onChange={(event) => patch({ apiKey: event.target.value })}
@@ -271,7 +271,7 @@ export function ProviderEditor({
 						type="button"
 					>
 						<Download size={12} />
-						{discoveryBusy ? "拉取中…" : "拉取模型"}
+						{discoveryBusy ? t("拉取中…") : t("拉取模型")}
 					</button>
 					<button
 						className={buttonClass("secondary", "sm")}
@@ -279,23 +279,21 @@ export function ProviderEditor({
 						type="button"
 					>
 						<Plus size={12} />
-						手动添加模型
-					</button>
+						{t("手动添加模型")}</button>
 					<span className="min-w-0 flex-1 truncate text-[11px] text-[#98a2b3]">{discoveryNote}</span>
 				</div>
 
 				{discovered ? (
 					<div className="flex flex-col gap-1.5 rounded-xl border border-black/[0.08] p-2">
 						<div className="flex items-center justify-between gap-2 px-1">
-							<span className="text-[12px] text-[#667085]">端点返回的模型（勾选后加入）</span>
+							<span className="text-[12px] text-[#667085]">{t("端点返回的模型（勾选后加入）")}</span>
 							<button
 								className={buttonClass("primary", "sm")}
 								disabled={picked.size === 0}
 								onClick={adopt}
 								type="button"
 							>
-								加入选中（{picked.size}）
-							</button>
+								{t("加入选中（")}{picked.size}{t("）")}</button>
 						</div>
 						<div className="scrollbar-subtle max-h-56 overflow-y-auto">
 							{discovered.map((model) => (
@@ -323,8 +321,8 @@ export function ProviderEditor({
 										{model.id}
 									</span>
 									<span className="shrink-0 text-[11px] text-[#98a2b3]">
-										{model.contextWindow ? `上下文 ${model.contextWindow}` : ""}
-										{model.maxTokens ? ` · 输出 ${model.maxTokens}` : ""}
+										{model.contextWindow ? t("上下文 {contextWindow}", { "contextWindow": model.contextWindow }) : ""}
+										{model.maxTokens ? t(" · 输出 {maxTokens}", { "maxTokens": model.maxTokens }) : ""}
 									</span>
 								</button>
 							))}
@@ -341,19 +339,19 @@ export function ProviderEditor({
 										#{index + 1}
 									</span>
 									<span className="min-w-0 flex-1 truncate font-mono text-[12px] text-[#1f2937]">
-										{model.id || "（未填 id）"}
+										{model.id || t("（未填 id）")}
 									</span>
 									<button
 										className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[#b6bcc4] hover:bg-black/[0.04] hover:text-[#d92d20]"
 										onClick={() => patch({ models: draft.models.filter((_entry, at) => at !== index) })}
-										title="移除该模型"
+										title={t("移除该模型")}
 										type="button"
 									>
 										<Trash2 size={12} />
 									</button>
 								</div>
 								<div className="grid grid-cols-2 gap-3">
-									<Field label="模型 id（请求里发送的 id）">
+									<Field label={t("模型 id（请求里发送的 id）")}>
 										<input
 											className={SETTINGS_INPUT_CLASS}
 											onChange={(event) => patchModel(index, { id: event.target.value })}
@@ -361,7 +359,7 @@ export function ProviderEditor({
 											value={model.id}
 										/>
 									</Field>
-									<Field label="显示名（可选）">
+									<Field label={t("显示名（可选）")}>
 										<input
 											className={SETTINGS_INPUT_CLASS}
 											onChange={(event) => patchModel(index, { name: event.target.value })}
@@ -369,7 +367,7 @@ export function ProviderEditor({
 											value={model.name}
 										/>
 									</Field>
-									<Field label="上下文长度（tokens）">
+									<Field label={t("上下文长度（tokens）")}>
 										<input
 											className={SETTINGS_INPUT_CLASS}
 											inputMode="numeric"
@@ -378,7 +376,7 @@ export function ProviderEditor({
 											value={model.contextWindow}
 										/>
 									</Field>
-									<Field label="最大输出（tokens）">
+									<Field label={t("最大输出（tokens）")}>
 										<input
 											className={SETTINGS_INPUT_CLASS}
 											inputMode="numeric"
@@ -396,8 +394,7 @@ export function ProviderEditor({
 											onChange={(event) => patchModel(index, { reasoning: event.target.checked })}
 											type="checkbox"
 										/>
-										支持思考
-									</label>
+										{t("支持思考")}</label>
 									<label className="flex items-center gap-1.5 text-[12px] text-[#475467]">
 										<input
 											checked={model.vision}
@@ -405,21 +402,18 @@ export function ProviderEditor({
 											onChange={(event) => patchModel(index, { vision: event.target.checked })}
 											type="checkbox"
 										/>
-										支持图片
-									</label>
+										{t("支持图片")}</label>
 									<button
 										className="ml-auto text-[12px] text-[#667085] hover:text-[#1f2937]"
 										onClick={() => patchModel(index, { sampling: [...model.sampling, { key: "", value: "" }] })}
 										type="button"
 									>
-										+ 采样参数
-									</button>
+										{t("+ 采样参数")}</button>
 								</div>
 								{model.sampling.length > 0 ? (
 									<div className="flex flex-col gap-1.5">
 										<span className="text-[11px] text-[#98a2b3]">
-											原样并入请求体，vLLM 的 top_k、min_p 等
-										</span>
+											{t("原样并入请求体，vLLM 的 top_k、min_p 等")}</span>
 										{model.sampling.map((entry, position) => (
 											<div className="flex items-center gap-2" key={position}>
 												<input
@@ -454,7 +448,7 @@ export function ProviderEditor({
 															sampling: model.sampling.filter((_item, at) => at !== position),
 														})
 													}
-													title="移除该参数"
+													title={t("移除该参数")}
 													type="button"
 												>
 													<Trash2 size={12} />
@@ -468,25 +462,22 @@ export function ProviderEditor({
 					</div>
 				) : (
 					<div className="rounded-lg border border-dashed border-black/[0.12] px-3 py-4 text-center text-[12px] text-[#98a2b3]">
-						还没有模型：点「拉取模型」从端点读取，或手动添加。
-					</div>
+						{t("还没有模型：点「拉取模型」从端点读取，或手动添加。")}</div>
 				)}
 			</div>
 
 			<div className="flex shrink-0 items-center justify-end gap-2 border-t-[0.5px] border-black/[0.06] px-5 py-3">
 				<span className="mr-auto min-w-0 truncate text-[11px] text-[#98a2b3]">
-					密钥只写入配置文件，读取时不会回传到界面
-				</span>
+					{t("密钥只写入配置文件，读取时不会回传到界面")}</span>
 				<button className={buttonClass("secondary")} onClick={onCancel} type="button">
-					取消
-				</button>
+					{t("取消")}</button>
 				<button
 					className={buttonClass("primary")}
 					disabled={busy || !draft.id.trim() || !draft.baseUrl.trim()}
 					onClick={onSave}
 					type="button"
 				>
-					{editing ? "保存修改" : "保存供应商"}
+					{editing ? t("保存修改") : t("保存供应商")}
 				</button>
 			</div>
 			<datalist id="sampling-keys">

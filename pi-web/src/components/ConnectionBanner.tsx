@@ -1,4 +1,5 @@
 import { usePiStore } from "../state/store";
+import { t } from "../i18n";
 
 export function ConnectionBanner() {
 	const connectionError = usePiStore((state) => state.connectionError);
@@ -14,7 +15,7 @@ export function ConnectionBanner() {
 				onClick={() => void reconnect()}
 				type="button"
 			>
-				{status === "starting" ? "正在重新连接..." : "重新连接"}
+				{status === "starting" ? t("正在重新连接...") : t("重新连接")}
 			</button>
 		</div>
 	);

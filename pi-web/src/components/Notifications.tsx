@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { usePiStore } from "../state/store";
 import type { ExtensionUiNotification } from "../state/types";
 import { Presence } from "./Presence";
+import { t } from "../i18n";
 
 const TIMEOUTS: Record<string, number> = { error: 8000, info: 4000, warning: 6000 };
 
@@ -45,7 +46,7 @@ function Toast({
 						event.stopPropagation();
 						onDismiss();
 					}}
-					title="关闭"
+					title={t("关闭")}
 					type="button"
 				>
 					<X size={13} />

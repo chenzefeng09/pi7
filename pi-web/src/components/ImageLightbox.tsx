@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useImageMenu } from "./ImageMenu";
+import { t } from "../i18n";
 
 /**
  * Original-image preview, the harness's ImageLightbox: a full-viewport backdrop with a separate
@@ -32,7 +33,7 @@ export function ImageLightbox({ alt, onClose, src }: { alt: string; onClose: () 
 
 	return createPortal(
 		<div
-			aria-label="原图预览"
+			aria-label={t("原图预览")}
 			aria-modal="true"
 			className="fixed inset-0 z-[1000] grid place-items-center p-10"
 			role="dialog"
@@ -50,7 +51,7 @@ export function ImageLightbox({ alt, onClose, src }: { alt: string; onClose: () 
 			/>
 			{imageMenu.menu}
 			<button
-				aria-label="关闭原图预览"
+				aria-label={t("关闭原图预览")}
 				className="fixed right-5 top-5 z-10 grid h-9 w-9 place-items-center rounded-full border-[0.5px] border-black/10 bg-white text-[#1f2937] transition-colors hover:bg-black/[0.05]"
 				onClick={onClose}
 				ref={closeRef}

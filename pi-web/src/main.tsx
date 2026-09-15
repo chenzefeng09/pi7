@@ -2,11 +2,14 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import "./styles.css";
+import { getLocale } from "./i18n";
 import { startAppearance } from "./state/appearance";
 import { usePiStore } from "./state/store";
 
 const container = document.getElementById("root");
 if (!container) throw new Error("root element not found");
+
+document.documentElement.lang = getLocale() === "zh" ? "zh-CN" : "en";
 
 // Before the first paint, so a dark preference never flashes a light frame.
 startAppearance();

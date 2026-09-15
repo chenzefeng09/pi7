@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 /** File-kind classification and small legacy helpers shared by the file panel. */
 
 export type FileKind =
@@ -135,7 +136,7 @@ async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
 		total += value.byteLength;
 		if (total > MAX_INFLATED_BYTES) {
 			await reader.cancel();
-			throw new Error(`解压结果超过 ${MAX_INFLATED_BYTES / 1024 / 1024}MB，已放弃预览`);
+			throw new Error(t("解压结果超过 {arg}MB，已放弃预览", { "arg": MAX_INFLATED_BYTES / 1024 / 1024 }));
 		}
 		chunks.push(value);
 	}
@@ -160,7 +161,7 @@ async function readZip(base64: string): Promise<Map<string, Uint8Array>> {
 			break;
 		}
 	}
-	if (endOfDirectory < 0) throw new Error("不是有效的 OOXML/zip 文件");
+	if (endOfDirectory < 0) throw new Error(t("不是有效的 OOXML/zip 文件"));
 	const count = view.getUint16(endOfDirectory + 10, true);
 	let offset = view.getUint32(endOfDirectory + 16, true);
 	const entries = new Map<string, Uint8Array>();
@@ -172,16 +173,16 @@ async function readZip(base64: string): Promise<Map<string, Uint8Array>> {
 		const extraLength = view.getUint16(offset + 30, true);
 		const commentLength = view.getUint16(offset + 32, true);
 		const localOffset = view.getUint32(offset + 42, true);
-		if (offset + 46 + nameLength + extraLength + commentLength > bytes.length) throw new Error("zip 目录条目越界");
+		if (offset + 46 + nameLength + extraLength + commentLength > bytes.length) throw new Error(t("zip 目录条目越界"));
 		const name = decoder.decode(bytes.subarray(offset + 46, offset + 46 + nameLength));
-		if (localOffset + 30 > bytes.length) throw new Error("zip 文件条目越界");
+		if (localOffset + 30 > bytes.length) throw new Error(t("zip 文件条目越界"));
 		const localNameLength = view.getUint16(localOffset + 26, true);
 		const localExtraLength = view.getUint16(localOffset + 28, true);
 		const start = localOffset + 30 + localNameLength + localExtraLength;
 		if (start < 0 || start + compressedSize > bytes.length) {
-			throw new Error("zip 文件条目越界");
+			throw new Error(t("zip 文件条目越界"));
 		}
-		if (method !== 0 && method !== 8) throw new Error(`不支持的 zip 压缩方法：${method}`);
+		if (method !== 0 && method !== 8) throw new Error(t("不支持的 zip 压缩方法：{method}", { "method": method }));
 		const raw = bytes.subarray(start, start + compressedSize);
 		entries.set(name, method === 0 ? raw : await inflateRaw(raw));
 		offset += 46 + nameLength + extraLength + commentLength;
@@ -214,7 +215,7 @@ function textOf(element: Element | undefined): string {
 export async function readDocx(base64: string): Promise<string[]> {
 	const entries = await readZip(base64);
 	const document = xmlOf(entries, "word/document.xml");
-	if (!document) throw new Error("docx 缺少 word/document.xml");
+	if (!document) throw new Error(t("docx 缺少 word/document.xml"));
 	const parsed = new DOMParser().parseFromString(document, "application/xml");
 	const paragraphs = Array.from(parsed.getElementsByTagName("w:p"));
 	const lines = paragraphs.map((paragraph) =>
@@ -283,7 +284,7 @@ export async function readXlsx(base64: string): Promise<SheetView[]> {
 			const width = Math.min(Math.max(-1, ...cells.keys()) + 1, 10_000);
 			rows.push(Array.from({ length: width }, (_, column) => cells.get(column) ?? ""));
 		}
-		sheets.push({ name: sheet.name || `工作表 ${index + 1}`, rows });
+		sheets.push({ name: sheet.name || t("工作表 {arg}", { "arg": index + 1 }), rows });
 	}
 	return sheets;
 }

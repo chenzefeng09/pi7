@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { t } from "../i18n";
 
 /** One exchange on the rail: the prompt that started it and the answer it got. */
 export interface RailMark {
@@ -84,7 +85,7 @@ export function TurnRail({
 
 	return (
 		<nav
-			aria-label="按轮次快速定位"
+			aria-label={t("按轮次快速定位")}
 			className="group absolute right-3 z-20 w-7 cursor-pointer"
 			onClick={(event) => {
 				const scroller = scrollerRef.current;
@@ -130,7 +131,7 @@ export function TurnRail({
 							>
 								<button
 									aria-current={active ? "true" : undefined}
-									aria-label={mark.prompt || `第 ${position + 1} 轮`}
+									aria-label={mark.prompt || t("第 {arg} 轮", { "arg": position + 1 })}
 									className="absolute inset-y-0 right-0 w-5 rounded-lg"
 									onClick={(event) => {
 										event.stopPropagation();

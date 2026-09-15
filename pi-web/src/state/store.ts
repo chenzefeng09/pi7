@@ -23,6 +23,7 @@ import type {
 	SessionTreeNode,
 	SlashCommand,
 } from "./types";
+import { t } from "../i18n";
 
 let messageCounter = 0;
 
@@ -208,7 +209,7 @@ interface RpcCapabilities {
 const MISSING_PATCH_NOTIFICATION_ID = "multi-session-missing";
 
 const MISSING_PATCH_MESSAGE =
-	"pi 运行时缺少多会话补丁，切换会话会中断当前任务。请按 docs/pi-runtime-patch.md 重新同步运行时。";
+	t("pi 运行时缺少多会话补丁，切换会话会中断当前任务。请按 docs/pi-runtime-patch.md 重新同步运行时。");
 
 /** Set by the first handshake that reports no multi-session support; keeps the warning to one. */
 let missingPatchWarned = false;
@@ -399,7 +400,7 @@ async function mutateQueue(
 			return true;
 		} catch (error) {
 			pushNotification(
-				`重建消息队列失败：${error instanceof Error ? error.message : String(error)}`,
+				t("重建消息队列失败：{arg}", { "arg": error instanceof Error ? error.message : String(error) }),
 				"error",
 			);
 			return false;
@@ -1129,6 +1130,8 @@ export interface PiStore extends PiState {
 	loadEntries: () => Promise<void>;
 	loadFiles: () => Promise<void>;
 	loadForkMessages: () => Promise<void>;
+	/** Re-read the model catalog; run after a restart or a model-config write, not just at boot. */
+	loadModels: () => Promise<void>;
 	loadPackages: () => Promise<void>;
 	loadLastAssistantText: () => Promise<void>;
 	loadSessions: () => Promise<void>;
@@ -1201,6 +1204,7 @@ const initialState: PiState = {
 	messageCount: 0,
 	messages: [],
 	models: [],
+	modelsLoaded: false,
 	multiSession: false,
 	notificationHistory: [],
 	outputTokensPerSecond: undefined,
@@ -1585,7 +1589,7 @@ export const usePiStore = create<PiStore>((set, get) => ({
 			await requeueQueue([...(cleared.steering ?? []), ...(cleared.followUp ?? [])], []);
 		} catch (error) {
 			pushNotification(
-				`插话失败：${error instanceof Error ? error.message : String(error)}（未送达的消息已放回输入框）`,
+				t("插话失败：{arg}（未送达的消息已放回输入框）", { "arg": error instanceof Error ? error.message : String(error) }),
 				"error",
 			);
 		}
@@ -1597,7 +1601,7 @@ export const usePiStore = create<PiStore>((set, get) => ({
 		await get().loadForkMessages();
 		// The copy carries the same transcript and the same derived title, so the only sign that
 		// anything happened is this notice: the session list now holds two identical rows.
-		pushNotification("已复制到新会话，原会话仍在列表中");
+		pushNotification(t("已复制到新会话，原会话仍在列表中"));
 	},
 	compact: async (customInstructions) => {
 		set({ compactionError: undefined, compactionStatus: "running", status: "streaming" });
@@ -1628,7 +1632,7 @@ export const usePiStore = create<PiStore>((set, get) => ({
 	},
 	applyPermissionMode: async (mode) => {
 		if (!hasWorkspaceForPrompt(get())) {
-			pushNotification("请先选择工作区，再开始会话。", "warning");
+			pushNotification(t("请先选择工作区，再开始会话。"), "warning");
 			return false;
 		}
 		// Extensions load with pi, so the renderer's cached command list can predate a runtime
@@ -1638,7 +1642,7 @@ export const usePiStore = create<PiStore>((set, get) => ({
 		// do, and it is the only thing that can, so say so instead of pretending the chip switched
 		// something on its own.
 		if (!get().commands.some((command) => command.name === "permission")) {
-			pushNotification("权限模式需要 pi 的 permission-gate 扩展，重启运行时后可用。", "warning");
+			pushNotification(t("权限模式需要 pi 的 permission-gate 扩展，重启运行时后可用。"), "warning");
 			return false;
 		}
 		await rpc({ message: `/permission ${mode}`, type: "prompt" });
@@ -1654,13 +1658,13 @@ export const usePiStore = create<PiStore>((set, get) => ({
 		// Without the extension, pi would take `/session-edit` for a normal prompt and ask the
 		// model about it; better to say why nothing happened.
 		if (!get().commands.some((command) => command.name === "session-edit")) {
-			pushNotification("编辑需要 pi 的 session-edit 扩展，重启 π7 后可用。", "warning");
+			pushNotification(t("编辑需要 pi 的 session-edit 扩展，重启 π7 后可用。"), "warning");
 			return false;
 		}
 		// pi can only move the branch while nothing is streaming, and a rewind that silently did
 		// not happen would stack the edit on top of the old branch instead of replacing it.
 		if (get().status === "streaming") {
-			pushNotification("正在回答中，等这一轮结束后再编辑这条消息。", "warning");
+			pushNotification(t("正在回答中，等这一轮结束后再编辑这条消息。"), "warning");
 			return false;
 		}
 		// The renderer's own count only moves when a snapshot is read, so a session used in this
@@ -1674,7 +1678,7 @@ export const usePiStore = create<PiStore>((set, get) => ({
 		await rpc({ message: `/session-edit ${entryId}`, type: "prompt" });
 		await get().refreshSession();
 		if (typeof before !== "number" || get().messageCount >= before) {
-			pushNotification("没能回到这条消息，未发送。", "error");
+			pushNotification(t("没能回到这条消息，未发送。"), "error");
 			// The branch may still have moved, so the edit goes back to the composer instead of
 			// disappearing with the row the user typed it in.
 			set({ composerAppend: false, composerText: text });
@@ -1715,8 +1719,7 @@ export const usePiStore = create<PiStore>((set, get) => ({
 		// Single-session cwd is only known after the runtime info call above; load project-scoped
 		// data afterwards so a stale/undefined cwd cannot select the wrong listing.
 		await get().loadFiles().catch(() => {});
-		const models = await rpc<{ models?: ModelInfo[] }>({ type: "get_available_models" });
-		if (Array.isArray(models?.models)) set({ models: models.models });
+		await get().loadModels();
 		const levels = await rpc<{ levels?: string[] }>({ type: "get_available_thinking_levels" });
 		if (Array.isArray(levels?.levels)) set({ availableThinkingLevels: levels.levels });
 		await Promise.all([get().loadSessions(), get().loadCommands(), get().loadFiles(), get().loadPackages()]);
@@ -1769,6 +1772,13 @@ export const usePiStore = create<PiStore>((set, get) => ({
 			sessionCwd: sessions.find((session) => session.sessionId === (open?.activeSessionId ?? sessions[0]?.sessionId))
 				?.cwd,
 		});
+	},
+	loadModels: async () => {
+		const models = await rpc<{ models?: ModelInfo[] }>({ type: "get_available_models" }).catch(() => undefined);
+		// modelsLoaded matters separately from the list itself: the onboarding banner and the
+		// composer's no-model gate only apply once "empty" is known to mean "nothing configured".
+		set({ modelsLoaded: true });
+		if (Array.isArray(models?.models)) set({ models: models.models });
 	},
 	loadCommands: async () => {
 		const generation = ++commandLoadGeneration;
@@ -1927,6 +1937,9 @@ export const usePiStore = create<PiStore>((set, get) => ({
 			// keepSession: the caller switches to a session itself right after (workspace switch).
 			if (!options?.keepSession) await restoreVisibleSession(get, previousSessionFile);
 			await Promise.all([get().loadSessions(), get().loadCommands(), get().loadFiles(), get().loadPackages()]);
+			// A restart re-reads models.json, so the catalog can change here (e.g. the first provider
+			// was just added in settings); without this the no-model state would linger.
+			await get().loadModels();
 		} catch (error) {
 			set({
 				connectionError: error instanceof Error ? error.message : String(error),
@@ -2119,7 +2132,7 @@ export const usePiStore = create<PiStore>((set, get) => ({
 			sessionId !== undefined && get().multiSession && sessionId !== get().activeHandleId;
 		// The workspace check guards the visible session; a background handle already has its own cwd.
 		if (!targetBackground && !hasWorkspaceForPrompt(get())) {
-			const message = "请先选择工作区，再开始会话。";
+			const message = t("请先选择工作区，再开始会话。");
 			set({ error: message, status: "idle" });
 			pushNotification(message, "warning");
 			throw new Error(message);
@@ -2140,7 +2153,7 @@ export const usePiStore = create<PiStore>((set, get) => ({
 			// the composer in stop mode for good, and the caller needs to know the send failed.
 			const message = error instanceof Error ? error.message : String(error);
 			if (!targetBackground) set({ error: message, status: "idle" });
-			pushNotification(`发送失败：${message}`, "error");
+			pushNotification(t("发送失败：{message}", { "message": message }), "error");
 			throw error;
 		}
 		// Extension slash commands handle the prompt without starting an agent turn, so an

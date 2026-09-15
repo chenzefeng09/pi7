@@ -4,6 +4,7 @@ import { projectGroups, useProjectCatalog } from "../state/projects";
 import { usePiStore, useSessionCwd } from "../state/store";
 import { useUiStore } from "../state/ui";
 import { Presence, popoverOverlayClass, popoverPanelClass } from "./Presence";
+import { t } from "../i18n";
 
 /**
  * Project chip above the composer, the Codex pattern: it names the folder the chat runs in and
@@ -77,7 +78,7 @@ export function ProjectPicker() {
 					open ? "bg-black/[0.07]" : "hover:bg-black/[0.06]"
 				} ${active ? "text-[#374151]" : "text-[#667085]"}`}
 				onClick={() => setOpen((value) => !value)}
-				title={active ? `当前项目：${active.name}` : "选择项目来运行聊天"}
+				title={active ? t("当前项目：{name}", { "name": active.name }) : t("选择项目来运行聊天")}
 				type="button"
 			>
 				{status === "starting" ? (
@@ -85,7 +86,7 @@ export function ProjectPicker() {
 				) : (
 					<Folder className="shrink-0 text-[#6f7a72]" size={15} />
 				)}
-				<span className="min-w-0 truncate">{active?.name ?? "选择项目"}</span>
+				<span className="min-w-0 truncate">{active?.name ?? t("选择项目")}</span>
 			</button>
 			{failure ? <span className="truncate text-[12px] text-[#b42318]">{failure}</span> : null}
 			<Presence open={open}>
@@ -119,14 +120,14 @@ export function ProjectPicker() {
 											void choose(matches[highlight].cwd);
 										}
 									}}
-									placeholder="搜索项目"
+									placeholder={t("搜索项目")}
 									ref={inputRef}
 									value={query}
 								/>
 							</div>
 							<div className="scrollbar-subtle max-h-[220px] overflow-y-auto px-1.5 pb-1.5">
 								{matches.length === 0 ? (
-									<div className="px-2.5 py-3 text-[13px] text-[#8a938c]">没有匹配的项目</div>
+									<div className="px-2.5 py-3 text-[13px] text-[#8a938c]">{t("没有匹配的项目")}</div>
 								) : (
 									matches.map((group, index) => (
 										<button
@@ -136,7 +137,7 @@ export function ProjectPicker() {
 											key={group.cwd || "no-project"}
 											onClick={() => void choose(group.cwd)}
 											onMouseEnter={() => setHighlight(index)}
-											title={group.cwd || "无项目路径"}
+											title={group.cwd || t("无项目路径")}
 											type="button"
 										>
 											<Folder className="shrink-0 text-[#6f7a72]" size={15} />
@@ -158,8 +159,7 @@ export function ProjectPicker() {
 									type="button"
 								>
 									<Plus className="shrink-0 text-[#6f7a72]" size={15} />
-									新建项目
-								</button>
+									{t("新建项目")}</button>
 							</div>
 						</div>
 					</>

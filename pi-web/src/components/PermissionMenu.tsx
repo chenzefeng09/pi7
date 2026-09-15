@@ -3,24 +3,25 @@ import { useEffect, useRef, useState } from "react";
 import { useBlankSession, usePiStore } from "../state/store";
 import { type PermissionMode, useUiStore } from "../state/ui";
 import { PermissionConfirmDialog } from "./PermissionConfirmDialog";
+import { t } from "../i18n";
 
 const MODES: Array<{ description: string; icon: typeof Eye; label: string; mode: PermissionMode }> = [
 	{
-		description: "只读工具可用，写入文件与执行命令会被拦截",
+		description: t("只读工具可用，写入文件与执行命令会被拦截"),
 		icon: Eye,
-		label: "仅可查看",
+		label: t("仅可查看"),
 		mode: "read-only",
 	},
 	{
-		description: "文件只能改工作区内；命令里出现工作区外的路径会被拦截",
+		description: t("文件只能改工作区内；命令里出现工作区外的路径会被拦截"),
 		icon: ShieldCheck,
-		label: "工作区内修改",
+		label: t("工作区内修改"),
 		mode: "workspace-write",
 	},
 	{
-		description: "不拦截任何工具，pi 拥有当前用户的所有权限",
+		description: t("不拦截任何工具，pi 拥有当前用户的所有权限"),
 		icon: ShieldAlert,
-		label: "完全权限",
+		label: t("完全权限"),
 		mode: "full",
 	},
 ];

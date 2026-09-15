@@ -12,6 +12,7 @@
  */
 import http from "node:http";
 import https from "node:https";
+import { t } from "../../src/i18n";
 
 /** Cap on a listing body; a catalog is small and a runaway reply must not be read. */
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -133,7 +134,7 @@ function getJson(url: string, headers: Record<string, string>): Promise<unknown>
 				response.on("data", (chunk: Buffer) => {
 					total += chunk.length;
 					if (total > MAX_RESPONSE_BYTES) {
-						request.destroy(new Error(`${url} 返回内容过大`));
+						request.destroy(new Error(t("{url} 返回内容过大", { "url": url })));
 						return;
 					}
 					chunks.push(chunk);
@@ -141,18 +142,18 @@ function getJson(url: string, headers: Record<string, string>): Promise<unknown>
 				response.on("end", () => {
 					const text = Buffer.concat(chunks).toString("utf8");
 					if (status < 200 || status >= 300) {
-						reject(new Error(`${url} 返回 ${String(status)}：${text.slice(0, 200)}`));
+						reject(new Error(t("{url} 返回 {arg}：{arg2}", { "url": url, "arg": String(status), "arg2": text.slice(0, 200) })));
 						return;
 					}
 					try {
 						resolve(JSON.parse(text) as unknown);
 					} catch {
-						reject(new Error(`${url} 的回复不是 JSON`));
+						reject(new Error(t("{url} 的回复不是 JSON", { "url": url })));
 					}
 				});
 			},
 		);
-		request.setTimeout(TIMEOUT_MS, () => request.destroy(new Error(`${url} 请求超时`)));
+		request.setTimeout(TIMEOUT_MS, () => request.destroy(new Error(t("{url} 请求超时", { "url": url }))));
 		request.on("error", reject);
 		request.end();
 	});
@@ -161,7 +162,7 @@ function getJson(url: string, headers: Record<string, string>): Promise<unknown>
 /** Ask one endpoint for its catalog. Never throws: the failure is part of the answer. */
 export async function discoverModels(request: DiscoveryRequest, storedKey?: string): Promise<DiscoveryResult> {
 	const baseUrl = (request.baseUrl ?? "").trim();
-	if (!baseUrl) return { error: "先填 baseUrl，再拉取模型。" };
+	if (!baseUrl) return { error: t("先填 baseUrl，再拉取模型。") };
 	const api = request.api ?? "openai-completions";
 	const url = listingUrl(baseUrl, api);
 	const key = (request.apiKey ?? "").trim() || storedKey;
@@ -178,7 +179,7 @@ export async function discoverModels(request: DiscoveryRequest, storedKey?: stri
 		const body = await getJson(url, headers);
 		const models = parseListing(body);
 		// Some gateways answer an empty 200 for an unknown path; say so instead of showing nothing.
-		if (models.length === 0) return { error: `${url} 没有返回可用的模型列表。`, url };
+		if (models.length === 0) return { error: t("{url} 没有返回可用的模型列表。", { "url": url }), url };
 		return { models, url };
 	} catch (error) {
 		return { error: error instanceof Error ? error.message : String(error), url };

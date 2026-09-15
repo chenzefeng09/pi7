@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import type { MessageUsage } from "../state/types";
 import { ClockIcon, DatabaseIcon } from "./StatIcons";
 import { cacheHitRate, formatDuration, formatPercent, formatTokens } from "./usage";
+import { t } from "../i18n";
 
 /** Turn usage as the pill and its dialog read it: summed buckets plus the call count. */
 export interface TurnUsageView extends MessageUsage {
@@ -132,21 +133,20 @@ export function TurnUsagePill({ model, usage }: { model?: string; usage: TurnUsa
 			<StatPill
 				expanded={open}
 				icon={<DatabaseIcon />}
-				label={`用量 ${formatTokens(usage.total)} tok`}
-				title="本轮用量"
+				label={t("用量 {arg} tok", { "arg": formatTokens(usage.total) })}
+				title={t("本轮用量")}
 				onClick={() => setOpen((value) => !value)}
 			/>
 			<StatPanel onClose={() => setOpen(false)} open={open} trigger={root}>
 				<PanelTitle icon={<DatabaseIcon size={14} />} value={`${usage.total.toLocaleString()} tok`}>
-					本轮用量
-				</PanelTitle>
+					{t("本轮用量")}</PanelTitle>
 				<dl className="grid grid-cols-[minmax(76px,auto)_minmax(0,1fr)] gap-x-4 gap-y-1.5">
-					{model ? <PanelRow label="提供方 / 模型" value={model} /> : null}
-					{hitRate === undefined ? null : <PanelRow label="缓存命中" value={formatPercent(hitRate, 1)} />}
-					<PanelRow label="未缓存输入" value={`${usage.input.toLocaleString()} tok`} />
-					<PanelRow label="缓存读取" value={`${usage.cacheRead.toLocaleString()} tok`} />
-					<PanelRow label="缓存写入" value={`${usage.cacheWrite.toLocaleString()} tok`} />
-					<PanelRow label="输出" value={`${usage.output.toLocaleString()} tok`} />
+					{model ? <PanelRow label={t("提供方 / 模型")} value={model} /> : null}
+					{hitRate === undefined ? null : <PanelRow label={t("缓存命中")} value={formatPercent(hitRate, 1)} />}
+					<PanelRow label={t("未缓存输入")} value={`${usage.input.toLocaleString()} tok`} />
+					<PanelRow label={t("缓存读取")} value={`${usage.cacheRead.toLocaleString()} tok`} />
+					<PanelRow label={t("缓存写入")} value={`${usage.cacheWrite.toLocaleString()} tok`} />
+					<PanelRow label={t("输出")} value={`${usage.output.toLocaleString()} tok`} />
 				</dl>
 			</StatPanel>
 		</span>
@@ -176,20 +176,19 @@ export function TurnTimePill({
 			<StatPill
 				expanded={open}
 				icon={<ClockIcon />}
-				label={`用时 ${formatDuration(durationMs)}`}
-				title="本轮用时和速度"
+				label={t("用时 {arg}", { "arg": formatDuration(durationMs) })}
+				title={t("本轮用时和速度")}
 				onClick={() => setOpen((value) => !value)}
 			/>
 			<StatPanel onClose={() => setOpen(false)} open={open} trigger={root}>
 				<PanelTitle icon={<ClockIcon size={14} />} value={formatDuration(durationMs)}>
-					本轮用时和速度
-				</PanelTitle>
+					{t("本轮用时和速度")}</PanelTitle>
 				<dl className="grid grid-cols-[minmax(76px,auto)_minmax(0,1fr)] gap-x-4 gap-y-1.5">
-					<PanelRow label="本轮总用时" value={formatDuration(durationMs)} />
+					<PanelRow label={t("本轮总用时")} value={formatDuration(durationMs)} />
 					{tokensPerSecond === undefined ? null : (
-						<PanelRow label="生成速度" value={`${Math.round(tokensPerSecond)} tok/s`} />
+						<PanelRow label={t("生成速度")} value={`${Math.round(tokensPerSecond)} tok/s`} />
 					)}
-					{ttftMs === undefined ? null : <PanelRow label="首 token 用时（TTFT）" value={formatDuration(ttftMs)} />}
+					{ttftMs === undefined ? null : <PanelRow label={t("首 token 用时（TTFT）")} value={formatDuration(ttftMs)} />}
 				</dl>
 			</StatPanel>
 		</span>

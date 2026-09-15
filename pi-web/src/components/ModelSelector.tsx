@@ -4,9 +4,10 @@ import { usePiStore } from "../state/store";
 import type { ModelInfo } from "../state/types";
 import { clampThinkingLevel } from "../lib/thinking";
 import { Presence } from "./Presence";
+import { t } from "../i18n";
 
 function modelName(model: ModelInfo | undefined, modelId: string | undefined): string {
-	if (!model) return modelId ?? "选择模型";
+	if (!model) return modelId ?? t("选择模型");
 	return model.name ?? model.id;
 }
 
@@ -18,13 +19,13 @@ function compactModelName(model: ModelInfo | undefined, modelId: string | undefi
 
 function thinkingLevelLabel(value: string): string {
 	const labels: Record<string, string> = {
-		off: "关闭",
-		minimal: "最低",
-		low: "低",
-		medium: "中",
-		high: "高",
-		xhigh: "极高",
-		max: "最高",
+		off: t("关闭"),
+		minimal: t("最低"),
+		low: t("低"),
+		medium: t("中"),
+		high: t("高"),
+		xhigh: t("极高"),
+		max: t("最高"),
 	};
 	return labels[value] ?? (value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value);
 }
@@ -155,7 +156,7 @@ export function ModelSelector() {
 					menu ? "bg-transparent hover:bg-transparent" : "bg-black/[0.05] hover:bg-black/[0.08]"
 				}`}
 				onClick={() => setMenu((current) => (current ? null : hasLevels ? "level" : "model"))}
-				title="选择模型和强度"
+				title={t("选择模型和强度")}
 				type="button"
 			>
 				<span className="min-w-0 truncate text-[#1f2937]">{selectedModelName}</span>
@@ -167,11 +168,11 @@ export function ModelSelector() {
 					<button
 					className="mx-auto flex w-fit flex-col items-center rounded-xl px-2.5 py-1 transition-colors hover:bg-black/[0.05]"
 						onClick={() => setMenu("model")}
-						title="选择模型"
+						title={t("选择模型")}
 						type="button"
 					>
 						<span className="flex items-center gap-0.5 text-[13px] font-semibold text-[#2f7df6]">
-							{selectedThinkingLevel || "默认"}
+							{selectedThinkingLevel || t("默认")}
 							<ChevronRight className="text-[#8b95a1]" size={13} />
 						</span>
 						<span className="max-w-[190px] truncate text-[11px] text-[#8b95a1]">{selectedModelName}</span>
@@ -191,7 +192,7 @@ export function ModelSelector() {
 			</Presence>
 			<Presence open={view === "model"}>
 				<div className="popup-fade absolute bottom-[calc(100%+8px)] right-0 z-50 w-[260px] overflow-hidden rounded-[16px] border border-black/[0.06] bg-white p-1 shadow-[0_14px_38px_rgba(15,23,42,0.14)]">
-					<div className="px-2.5 pb-0.5 pt-1.5 text-[11px] text-[#98a2b3]">选择模型</div>
+					<div className="px-2.5 pb-0.5 pt-1.5 text-[11px] text-[#98a2b3]">{t("选择模型")}</div>
 					<div className="scrollbar-subtle max-h-[280px] overflow-y-auto">
 						{models.map((item) => {
 							const selected = item.id === model;
@@ -216,7 +217,7 @@ export function ModelSelector() {
 							);
 						})}
 						{models.length === 0 ? (
-							<div className="px-2.5 py-4 text-center text-[11px] text-[#8b95a1]">未找到模型</div>
+							<div className="px-2.5 py-4 text-center text-[11px] text-[#8b95a1]">{t("未找到模型")}</div>
 						) : null}
 					</div>
 				</div>

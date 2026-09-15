@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $node18 = "C:\Users\27581\AppData\Local\nvm\v18.20.8\node.exe"
 $piWeb = "D:\chenzefeng\Develop\pi\pi-web"
-$exe = Join-Path $piWeb "release\win-unpacked\π7.exe"
+$exe = Join-Path $piWeb "release\win-unpacked\pi7.exe"
 $outLog = Join-Path $env:TEMP "pi-web-packaged.out.log"
 $errLog = Join-Path $env:TEMP "pi-web-packaged.err.log"
 

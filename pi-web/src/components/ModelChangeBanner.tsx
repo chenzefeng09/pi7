@@ -1,6 +1,7 @@
 import { Info, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { usePiStore } from "../state/store";
+import { t } from "../i18n";
 
 export function ModelChangeBanner() {
 	const model = usePiStore((state) => state.model);
@@ -34,8 +35,7 @@ export function ModelChangeBanner() {
 			<div className="flex w-full max-w-[760px] items-start gap-2.5 rounded-2xl border border-black/[0.06] bg-white px-4 py-3 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
 				<Info className="mt-0.5 shrink-0 text-[#667085]" size={16} />
 				<div className="min-w-0 flex-1 text-[13px] leading-5 text-[#374151]">
-					在对话中途更改模型会降低性能。为获得最佳体验，请开始新会话，或
-					<button
+					{t("在对话中途更改模型会降低性能。为获得最佳体验，请开始新会话，或")}<button
 						className="font-medium text-[#2f7df6] hover:underline"
 						onClick={() => {
 							const provider = previousInfo?.provider;
@@ -44,14 +44,13 @@ export function ModelChangeBanner() {
 						}}
 						type="button"
 					>
-						切换回 {previousName}
+						{t("切换回")}{previousName}
 					</button>
-					。
-				</div>
+					{t("。")}</div>
 				<button
 					className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#98a2b3] hover:bg-black/[0.05] hover:text-[#4b5563]"
 					onClick={() => setPrevious(null)}
-					title="关闭"
+					title={t("关闭")}
 					type="button"
 				>
 					<X size={14} />

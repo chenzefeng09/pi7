@@ -81,6 +81,15 @@ describe("turn analysis", () => {
 		])[1];
 		expect(analyzeTurn(withSubagent, true).counts).toEqual({ messages: 1, subagents: 1, toolCalls: 1 });
 	});
+
+	it("counts subagent_models as a tool call, not a delegation", () => {
+		const withModels = groupTurns([
+			user("u1", "hi"),
+			assistant("a1", [tool("subagent"), tool("subagent_models"), text("go")]),
+			assistant("a2", [text("done")]),
+		])[1];
+		expect(analyzeTurn(withModels, true).counts).toEqual({ messages: 1, subagents: 1, toolCalls: 1 });
+	});
 });
 
 describe("fold label", () => {

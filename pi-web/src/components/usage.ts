@@ -1,4 +1,5 @@
 import type { MessageUsage, SessionStats } from "../state/types";
+import { t } from "../i18n";
 
 /** The four token columns a rate can be computed from; session and turn totals share them. */
 export type TokenCounts = MessageUsage | SessionStats["tokens"];
@@ -52,13 +53,13 @@ export function formatPercent(value: number, decimals: 0 | 1 = 0): string {
  */
 export function formatDuration(ms: number): string {
 	if (!Number.isFinite(ms) || ms < 0) return "";
-	if (ms < 1000) return `${Math.max(0, Math.round(ms))}毫秒`;
+	if (ms < 1000) return t("{arg}毫秒", { "arg": Math.max(0, Math.round(ms)) });
 	const seconds = Math.round(ms / 1000);
-	if (seconds < 60) return `${seconds}秒`;
+	if (seconds < 60) return t("{seconds}秒", { "seconds": seconds });
 	const minutes = Math.floor(seconds / 60);
 	const rest = seconds % 60;
-	if (minutes < 60) return `${minutes}分${String(rest).padStart(2, "0")}秒`;
-	return `${Math.floor(minutes / 60)}小时${String(minutes % 60).padStart(2, "0")}分`;
+	if (minutes < 60) return t("{minutes}分{arg}秒", { "minutes": minutes, "arg": String(rest).padStart(2, "0") });
+	return t("{arg}小时{arg2}分", { "arg": Math.floor(minutes / 60), "arg2": String(minutes % 60).padStart(2, "0") });
 }
 
 /** Clock time of a settled turn: "18:36". */

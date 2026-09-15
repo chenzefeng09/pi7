@@ -5,6 +5,7 @@ import { buttonClass } from "./buttons";
 import { Modal } from "./Modal";
 import { Presence } from "./Presence";
 import { formatTokens } from "./usage";
+import { t } from "../i18n";
 
 /**
  * Ring geometry taken from the harness composer meter: a 14px viewBox with a 2px stroke, so the
@@ -74,7 +75,7 @@ export function ContextMeter() {
 					open ? "bg-black/[0.08]" : "hover:bg-black/[0.06]"
 				}`}
 				onClick={() => setOpen((value) => !value)}
-				title={known ? `上下文已用 ${clamped.toFixed(0)}%` : "上下文用量未知"}
+				title={known ? t("上下文已用 {arg}%", { "arg": clamped.toFixed(0) }) : t("上下文用量未知")}
 				type="button"
 			>
 				{running ? (
@@ -102,8 +103,8 @@ export function ContextMeter() {
 					role="dialog"
 				>
 					<div className="flex items-center gap-1.5">
-						<span>上下文已用</span>
-						<span className="font-medium text-[#111827]">{known ? `${clamped.toFixed(0)}%` : "未知"}</span>
+						<span>{t("上下文已用")}</span>
+						<span className="font-medium text-[#111827]">{known ? `${clamped.toFixed(0)}%` : t("未知")}</span>
 						<span className="ml-auto font-medium tabular-nums text-[#111827]">
 							{known ? `${formatTokens(used ?? 0)} / ${formatTokens(capacity ?? 0)}` : ""}
 						</span>
@@ -113,15 +114,15 @@ export function ContextMeter() {
 					</div>
 					<dl>
 						<div className="flex items-center justify-between gap-3 py-0.5">
-							<dt>已用</dt>
+							<dt>{t("已用")}</dt>
 							<dd className="tabular-nums text-[#111827]">{tokenLabel(used)}</dd>
 						</div>
 						<div className="flex items-center justify-between gap-3 py-0.5">
-							<dt>剩余</dt>
+							<dt>{t("剩余")}</dt>
 							<dd className="tabular-nums text-[#111827]">{tokenLabel(remaining)}</dd>
 						</div>
 						<div className="flex items-center justify-between gap-3 py-0.5">
-							<dt>上下文窗口</dt>
+							<dt>{t("上下文窗口")}</dt>
 							<dd className="tabular-nums text-[#111827]">{tokenLabel(capacity)}</dd>
 						</div>
 					</dl>
@@ -133,8 +134,7 @@ export function ContextMeter() {
 						}}
 						type="button"
 					>
-						压缩上下文…
-					</button>
+						{t("压缩上下文…")}</button>
 				</div>
 			</Presence>
 			<Modal
@@ -143,20 +143,18 @@ export function ContextMeter() {
 				open={confirmOpen}
 			>
 				<>
-					<div className="text-[17px] font-semibold tracking-[-0.01em] text-[#111827]">压缩上下文</div>
+					<div className="text-[17px] font-semibold tracking-[-0.01em] text-[#111827]">{t("压缩上下文")}</div>
 					<div className="mt-2 text-[13px] leading-5 text-[#667085]">
 						{known
-							? `当前上下文已用 ${clamped.toFixed(1)}%`
-							: "当前上下文用量未知（压缩后需要一次新的回复才能测量）"}
+							? t("当前上下文已用 {arg}%", { "arg": clamped.toFixed(1) })
+							: t("当前上下文用量未知（压缩后需要一次新的回复才能测量）")}
 						{known && typeof used === "number" && typeof capacity === "number"
-							? `（${formatTokens(used)} / ${formatTokens(capacity)} tok）`
+							? t("（{arg} / {arg2} tok）", { "arg": formatTokens(used), "arg2": formatTokens(capacity) })
 							: ""}
-						。压缩会把较早的会话历史总结成摘要，为后续对话腾出空间。
-					</div>
+						{t("。压缩会把较早的会话历史总结成摘要，为后续对话腾出空间。")}</div>
 					<div className="mt-4 flex justify-end gap-2">
 						<button className={buttonClass()} onClick={() => setConfirmOpen(false)} type="button">
-							取消
-						</button>
+							{t("取消")}</button>
 						<button
 							className={buttonClass("primary")}
 							onClick={() => {
@@ -165,8 +163,7 @@ export function ContextMeter() {
 							}}
 							type="button"
 						>
-							压缩
-						</button>
+							{t("压缩")}</button>
 					</div>
 				</>
 			</Modal>

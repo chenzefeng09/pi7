@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { usePiStore } from "../state/store";
 import { buttonClass } from "./buttons";
 import { Modal } from "./Modal";
+import { t } from "../i18n";
 
 export function ExtensionDialogHost() {
 	const request = usePiStore((state) => state.extensionUiRequests[0]);
@@ -32,8 +33,8 @@ export function ExtensionDialogHost() {
 	// A request from a background session still has to be answered, so it names the session it
 	// came from: without that the dialog looks like it belongs to whatever is on screen.
 	const title = shown.sessionLabel
-		? `会话「${shown.sessionLabel}」${shown.title ?? "需要确认"}`
-		: (shown.title ?? "扩展请求");
+		? t("会话「{sessionLabel}」{arg}", { "sessionLabel": shown.sessionLabel, "arg": shown.title ?? t("需要确认") })
+		: (shown.title ?? t("扩展请求"));
 
 	const cancel = () => void respond({ cancelled: true, id: shown.id, type: "extension_ui_response" });
 	const submitValue = () => void respond({ id: shown.id, type: "extension_ui_response", value });
@@ -89,26 +90,22 @@ export function ExtensionDialogHost() {
 				{shown.method === "confirm" ? (
 					<div className="mt-5 flex justify-end gap-2">
 						<button className={buttonClass()} onClick={cancel} type="button">
-							取消
-						</button>
+							{t("取消")}</button>
 						<button
 							className={buttonClass("primary")}
 							onClick={() => void respond({ confirmed: true, id: shown.id, type: "extension_ui_response" })}
 							type="button"
 						>
-							确认
-						</button>
+							{t("确认")}</button>
 					</div>
 				) : null}
 
 				{shown.method === "input" || shown.method === "editor" ? (
 					<div className="mt-5 flex justify-end gap-2">
 						<button className={buttonClass()} onClick={cancel} type="button">
-							取消
-						</button>
+							{t("取消")}</button>
 						<button className={buttonClass("primary")} onClick={submitValue} type="button">
-							提交
-						</button>
+							{t("提交")}</button>
 					</div>
 				) : null}
 			</>

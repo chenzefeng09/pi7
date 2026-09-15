@@ -271,6 +271,8 @@ export interface PiState {
 	model?: string;
 	messages: ChatMessage[];
 	models: ModelInfo[];
+	/** True once `get_available_models` answered during initialize; until then an empty list means "not loaded yet", not "nothing configured". */
+	modelsLoaded: boolean;
 	/** True once `get_capabilities` reported that pi can hold several sessions at once. */
 	multiSession: boolean;
 	notificationHistory: ExtensionUiNotification[];

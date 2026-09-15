@@ -25,58 +25,59 @@ import { useUiStore } from "../state/ui";
 import { MENU_PANEL_CLASS } from "./Menu";
 import { popoverOverlayClass, popoverPanelClass, Presence } from "./Presence";
 import { ScheduleCreateDialog } from "./ScheduleCreateDialog";
+import { t } from "../i18n";
 
 type ScheduleTab = "all" | "active" | "paused" | "completed";
 
 const TABS: Array<{ id: ScheduleTab; label: string }> = [
-	{ id: "all", label: "全部" },
-	{ id: "active", label: "已开启" },
-	{ id: "paused", label: "已暂停" },
-	{ id: "completed", label: "已完成" },
+	{ id: "all", label: t("全部") },
+	{ id: "active", label: t("已开启") },
+	{ id: "paused", label: t("已暂停") },
+	{ id: "completed", label: t("已完成") },
 ];
 
-const WEEKDAY_LABELS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+const WEEKDAY_LABELS = [t("周日"), t("周一"), t("周二"), t("周三"), t("周四"), t("周五"), t("周六")];
 
 const SUGGESTIONS = [
 	{
 		icon: Bell,
 		iconClass: "text-[#2f7df6]",
-		prompt: "整理最近的会话记录和工作进展，生成今日简报，并列出今天的优先事项。",
+		prompt: t("整理最近的会话记录和工作进展，生成今日简报，并列出今天的优先事项。"),
 		repeat: "daily" as ScheduledTaskRepeat,
-		schedule: "工作日 8:00",
+		schedule: t("工作日 8:00"),
 		time: "08:00",
-		title: "每日简报",
+		title: t("每日简报"),
 	},
 	{
 		icon: CalendarDays,
 		iconClass: "text-[#8b5cf6]",
-		prompt: "回顾本周我完成的工作，整理成简明的状态更新，并列出下周的计划。",
+		prompt: t("回顾本周我完成的工作，整理成简明的状态更新，并列出下周的计划。"),
 		repeat: "weekly" as ScheduledTaskRepeat,
-		schedule: "星期五（时间：16:00）",
+		schedule: t("星期五（时间：16:00）"),
 		time: "16:00",
-		title: "每周回顾",
+		title: t("每周回顾"),
 		weekday: 5,
 	},
 	{
 		icon: ClipboardCheck,
 		iconClass: "text-[#16a34a]",
-		prompt: "检查进行中的任务和未完成的跟进事项，标记需要关注的内容并给出下一步建议。",
+		prompt: t("检查进行中的任务和未完成的跟进事项，标记需要关注的内容并给出下一步建议。"),
 		repeat: "daily" as ScheduledTaskRepeat,
-		schedule: "工作日 9:00",
+		schedule: t("工作日 9:00"),
 		time: "09:00",
-		title: "跟进监控",
+		title: t("跟进监控"),
 	},
 ];
 
 function thinkingLevelLabel(value: string): string {
 	const labels: Record<string, string> = {
-		off: "关闭",
-		minimal: "最低",
-		low: "低",
-		medium: "中",
-		high: "高",
-		xhigh: "极高",
-		max: "最高",
+		off: t("关闭"),
+		minimal: t("最低"),
+		low: t("低"),
+		medium: t("中"),
+		high: t("高"),
+		xhigh: t("极高"),
+		max: t("最高"),
 	};
 	return labels[value] ?? value;
 }
@@ -89,34 +90,34 @@ function taskTitle(task: ScheduledTask): string {
 function relativeRun(value: string): string {
 	const diff = new Date(value).getTime() - Date.now();
 	if (Number.isNaN(diff)) return "";
-	if (diff <= 0) return "即将运行";
+	if (diff <= 0) return t("即将运行");
 	const minutes = Math.round(diff / 60000);
-	if (minutes < 60) return `${minutes} 分钟后`;
+	if (minutes < 60) return t("{minutes} 分钟后", { "minutes": minutes });
 	const hours = Math.round(minutes / 60);
-	if (hours < 24) return `${hours} 小时后`;
-	return `${Math.round(hours / 24)} 天后`;
+	if (hours < 24) return t("{hours} 小时后", { "hours": hours });
+	return t("{arg} 天后", { "arg": Math.round(hours / 24) });
 }
 
 function scheduleSummary(task: ScheduledTask): string {
 	if (task.repeat === "weekly") {
-		const weekday = typeof task.weekday === "number" ? WEEKDAY_LABELS[task.weekday] : "周五";
-		return `每${weekday} ${task.time} · 下次运行 ${relativeRun(task.scheduledAt)}`;
+		const weekday = typeof task.weekday === "number" ? WEEKDAY_LABELS[task.weekday] : t("周五");
+		return t("每{weekday} {time} · 下次运行 {arg}", { "weekday": weekday, "time": task.time, "arg": relativeRun(task.scheduledAt) });
 	}
 	if (task.repeat === "daily") {
-		return `每天 ${task.time} · 下次运行 ${relativeRun(task.scheduledAt)}`;
+		return t("每天 {time} · 下次运行 {arg}", { "time": task.time, "arg": relativeRun(task.scheduledAt) });
 	}
 	const date = new Date(task.scheduledAt);
 	const text = Number.isNaN(date.getTime())
 		? task.scheduledAt
 		: date.toLocaleString("zh-CN", { day: "numeric", hour: "2-digit", minute: "2-digit", month: "numeric" });
-	return `一次性 · ${text}`;
+	return t("一次性 · {text}", { "text": text });
 }
 
 function statusLabel(task: ScheduledTask): string {
-	if (task.status === "paused") return "已暂停";
-	if (task.status === "completed") return "已完成";
-	if (task.status === "error") return "失败";
-	return "活跃";
+	if (task.status === "paused") return t("已暂停");
+	if (task.status === "completed") return t("已完成");
+	if (task.status === "error") return t("失败");
+	return t("活跃");
 }
 
 function matchesTab(task: ScheduledTask, tab: ScheduleTab): boolean {
@@ -192,7 +193,7 @@ export function ScheduleView() {
 							<button
 								className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#667085] hover:bg-black/[0.05]"
 								onClick={() => setView("chat")}
-								title="返回对话"
+								title={t("返回对话")}
 								type="button"
 							>
 								<ArrowLeft size={16} />
@@ -220,8 +221,7 @@ export function ScheduleView() {
 							type="button"
 						>
 							<Plus size={14} />
-							创建
-						</button>
+							{t("创建")}</button>
 					</div>
 
 					<div className="mt-4 flex h-10 items-center gap-2 rounded-full border border-black/[0.1] px-4">
@@ -229,7 +229,7 @@ export function ScheduleView() {
 						<input
 							className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-[#98a2b3]"
 							onChange={(event) => setSearch(event.target.value)}
-							placeholder="搜索已安排任务"
+							placeholder={t("搜索已安排任务")}
 							value={search}
 						/>
 					</div>
@@ -259,21 +259,21 @@ export function ScheduleView() {
 										</span>
 										<span className="mt-0.5 block truncate text-[13px] text-[#98a2b3]">
 											{scheduleSummary(task)}
-											{task.status === "paused" ? " · 已暂停" : null}
-											{task.status === "running" ? " · 运行中" : null}
-											{task.status === "error" ? ` · ${task.error ?? "失败"}` : null}
+											{task.status === "paused" ? t(" · 已暂停") : null}
+											{task.status === "running" ? t(" · 运行中") : null}
+											{task.status === "error" ? ` · ${task.error ?? t("失败")}` : null}
 										</span>
 									</span>
 								</button>
 							);
 						})}
 						{filtered.length === 0 ? (
-							<div className="py-10 text-center text-[13px] text-[#98a2b3]">暂无定时任务</div>
+							<div className="py-10 text-center text-[13px] text-[#98a2b3]">{t("暂无定时任务")}</div>
 						) : null}
 					</div>
 
 					<div className="mt-6">
-						<div className="text-[15px] font-medium text-[#1f2937]">建议</div>
+						<div className="text-[15px] font-medium text-[#1f2937]">{t("建议")}</div>
 						<div className="mt-2 divide-y divide-black/[0.05]">
 							{SUGGESTIONS.map((suggestion) => (
 								<button
@@ -309,7 +309,7 @@ export function ScheduleView() {
 									<button
 										className="flex h-8 w-8 items-center justify-center rounded-lg text-[#6b7280] hover:bg-black/[0.05]"
 										onClick={() => setMenuOpen((value) => !value)}
-										title="更多"
+										title={t("更多")}
 										type="button"
 									>
 										<MoreHorizontal size={17} />
@@ -337,8 +337,7 @@ export function ScheduleView() {
 															}}
 															type="button"
 														>
-															立即运行
-														</button>
+															{t("立即运行")}</button>
 													) : null}
 													<button
 														className="block w-full rounded-xl px-3 py-2.5 text-left text-[14px] text-[#f04438] hover:bg-black/[0.04]"
@@ -349,8 +348,7 @@ export function ScheduleView() {
 														}}
 														type="button"
 													>
-														删除任务
-													</button>
+														{t("删除任务")}</button>
 												</div>
 											</>
 										)}
@@ -368,7 +366,7 @@ export function ScheduleView() {
 										status: selected.status === "paused" ? "pending" : "paused",
 									});
 								}}
-									title={selected.status === "paused" ? "恢复" : "暂停"}
+									title={selected.status === "paused" ? t("恢复") : t("暂停")}
 									type="button"
 								>
 									{selected.status === "paused" ? <CirclePlay size={17} /> : <CirclePause size={17} />}
@@ -376,7 +374,7 @@ export function ScheduleView() {
 								<button
 									className="flex h-8 w-8 items-center justify-center rounded-lg text-[#6b7280] hover:bg-black/[0.05]"
 									onClick={() => setSelectedId(null)}
-									title="关闭"
+									title={t("关闭")}
 									type="button"
 								>
 									<X size={17} />
@@ -393,27 +391,27 @@ export function ScheduleView() {
 						) : null}
 
 						<div className="mt-6 flex items-center justify-between">
-							<span className="text-[14px] font-medium text-[#1f2937]">详情</span>
+							<span className="text-[14px] font-medium text-[#1f2937]">{t("详情")}</span>
 							<Info className="text-[#98a2b3]" size={15} />
 						</div>
 						<div className="mt-2 divide-y divide-black/[0.05] rounded-2xl border border-black/[0.08]">
 							<DetailRow
-								label="运行于"
+								label={t("运行于")}
 								onChange={(value) => updateTask(selected.id, { runTarget: value === "new" ? "new" : "current" })}
 								options={[
-									["new", "每次运行时新建聊天"],
-									["current", "在当前聊天中运行"],
+									["new", t("每次运行时新建聊天")],
+									["current", t("在当前聊天中运行")],
 								]}
 								value={selected.runTarget}
 							/>
 							<DetailRow
-								label="项目"
+								label={t("项目")}
 								onChange={(value) => updateTask(selected.id, { project: value || undefined })}
-				options={[["", "无"], ...projectOptions.map(([cwd, name]) => [cwd, name] as [string, string])]}
+				options={[["", t("无")], ...projectOptions.map(([cwd, name]) => [cwd, name] as [string, string])]}
 								value={selected.project ?? ""}
 							/>
 							<DetailRow
-								label="模型"
+								label={t("模型")}
 								onChange={(value) => {
 									if (!value) {
 										updateTask(selected.id, { model: undefined, provider: undefined });
@@ -422,14 +420,14 @@ export function ScheduleView() {
 									const target = models.find((item) => item.id === value);
 									updateTask(selected.id, { model: value, provider: target?.provider });
 								}}
-								options={[["", "跟随当前"], ...models.map((item) => [item.id, item.name ?? item.id] as [string, string])]}
+								options={[["", t("跟随当前")], ...models.map((item) => [item.id, item.name ?? item.id] as [string, string])]}
 								value={selected.model ?? ""}
 							/>
 							<DetailRow
-								label="推理"
+								label={t("推理")}
 								onChange={(value) => updateTask(selected.id, { thinking: value || undefined })}
 								options={[
-									["", "跟随当前"],
+									["", t("跟随当前")],
 									...availableThinkingLevels.map(
 										(level) => [level, thinkingLevelLabel(level)] as [string, string],
 									),
@@ -438,28 +436,28 @@ export function ScheduleView() {
 							/>
 						</div>
 
-						<div className="mt-6 text-[14px] font-medium text-[#1f2937]">频率</div>
+						<div className="mt-6 text-[14px] font-medium text-[#1f2937]">{t("频率")}</div>
 						<div className="mt-2 divide-y divide-black/[0.05] rounded-2xl border border-black/[0.08]">
 							<DetailRow
-								label="重复"
+								label={t("重复")}
 								onChange={(value) => patchSchedule(selected, { repeat: value as ScheduledTaskRepeat })}
 								options={[
-									["once", "一次"],
-									["daily", "每天"],
-									["weekly", "每周"],
+									["once", t("一次")],
+									["daily", t("每天")],
+									["weekly", t("每周")],
 								]}
 								value={selected.repeat}
 							/>
 							{selected.repeat === "weekly" ? (
 								<DetailRow
-									label="开启"
+									label={t("开启")}
 									onChange={(value) => patchSchedule(selected, { weekday: Number(value) })}
 									options={WEEKDAY_LABELS.map((label, index) => [String(index), label] as [string, string])}
 									value={String(selected.weekday ?? 5)}
 								/>
 							) : null}
 							<div className="flex items-center justify-between gap-3 px-4 py-3">
-								<span className="text-[14px] text-[#374151]">时间</span>
+								<span className="text-[14px] text-[#374151]">{t("时间")}</span>
 								<input
 									className="rounded-lg border border-transparent bg-transparent px-2 py-1 text-right text-[14px] text-[#1f2937] outline-none hover:border-black/[0.1] focus:border-[#2f7df6]"
 									onChange={(event) => {
@@ -472,11 +470,11 @@ export function ScheduleView() {
 								/>
 							</div>
 							<DetailRow
-								label="通知"
+								label={t("通知")}
 								onChange={(value) => updateTask(selected.id, { notify: value === "errors" ? "errors" : "all" })}
 								options={[
-									["all", "所有运行"],
-									["errors", "仅失败时"],
+									["all", t("所有运行")],
+									["errors", t("仅失败时")],
 								]}
 								value={selected.notify}
 							/>
@@ -484,7 +482,7 @@ export function ScheduleView() {
 						<div className="mt-3 text-[12px] text-[#98a2b3]">
 							{scheduleSummary(selected)}
 							{selected.completedAt
-								? ` · 上次完成 ${new Date(selected.completedAt).toLocaleString("zh-CN", { hour12: false })}`
+								? t(" · 上次完成 {arg}", { "arg": new Date(selected.completedAt).toLocaleString("zh-CN", { hour12: false }) })
 								: ""}
 						</div>
 					</div>

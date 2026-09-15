@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { t } from "../../src/i18n";
 
 /** How a provider gets its key; the value itself never leaves this module. */
 export type CredentialKind = "command" | "env" | "literal" | "none";
@@ -295,17 +296,17 @@ export interface ImportSummary {
 export function importModelConfig(agentDir: string, document: unknown): ImportSummary {
 	const empty: ImportSummary = { added: [], defaultsApplied: false, keptKeys: [], replaced: [] };
 	if (typeof document !== "object" || document === null || Array.isArray(document)) {
-		return { ...empty, error: "文件不是有效的 JSON 对象。" };
+		return { ...empty, error: t("文件不是有效的 JSON 对象。") };
 	}
 	const bundle = document as Partial<PortableBundle>;
 	if (bundle.format !== PORTABLE_FORMAT) {
-		return { ...empty, error: `不是 π7 模型配置导出文件（format 应为 ${PORTABLE_FORMAT}）。` };
+		return { ...empty, error: t("不是 π7 模型配置导出文件（format 应为 {PORTABLE_FORMAT}）。", { "PORTABLE_FORMAT": PORTABLE_FORMAT }) };
 	}
 	if (typeof bundle.version !== "number" || bundle.version > PORTABLE_VERSION) {
-		return { ...empty, error: `文件版本 ${String(bundle.version)} 高于本应用支持的 ${String(PORTABLE_VERSION)}。` };
+		return { ...empty, error: t("文件版本 {arg} 高于本应用支持的 {arg2}。", { "arg": String(bundle.version), "arg2": String(PORTABLE_VERSION) }) };
 	}
 	if (typeof bundle.providers !== "object" || bundle.providers === null || Array.isArray(bundle.providers)) {
-		return { ...empty, error: "文件里没有 providers。" };
+		return { ...empty, error: t("文件里没有 providers。") };
 	}
 
 	const files = agentFiles(agentDir);

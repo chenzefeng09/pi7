@@ -9,6 +9,7 @@ import {
 	messageImageFit,
 	messageImageTiled,
 } from "./images";
+import { t } from "../../i18n";
 
 /**
  * One message image: a bounded frame that opens the original on click.
@@ -37,11 +38,11 @@ function MessageImage({ block, tile }: { block: ImageBlock; tile: boolean }) {
 							? { height: fit.height, width: fit.width }
 							: { maxHeight: MESSAGE_IMAGE_LONG_EDGE, maxWidth: MESSAGE_IMAGE_LONG_EDGE }
 				}
-				title="查看原图（右键可复制）"
+				title={t("查看原图（右键可复制）")}
 				type="button"
 			>
 				<img
-					alt="附件"
+					alt={t("附件")}
 					className={tile || fit ? "h-full w-full object-cover" : "object-contain"}
 					onContextMenu={imageMenu.onContextMenu}
 					onLoad={(event) =>
@@ -51,7 +52,7 @@ function MessageImage({ block, tile }: { block: ImageBlock; tile: boolean }) {
 					src={source}
 				/>
 			</button>
-			{open ? <ImageLightbox alt="附件" onClose={() => setOpen(false)} src={source} /> : null}
+			{open ? <ImageLightbox alt={t("附件")} onClose={() => setOpen(false)} src={source} /> : null}
 			{imageMenu.menu}
 		</>
 	);

@@ -1,4 +1,5 @@
 import type { ChatMessage, ForkMessage, MessageBlock } from "../../state/types";
+import { t } from "../../i18n";
 
 /** One transcript entry: a user message, or the run of assistant steps that answered it. */
 export interface Turn {
@@ -55,7 +56,9 @@ export function analyzeTurn(turn: Turn, compact: boolean): TurnFlow {
 	for (const block of processBlocks) {
 		if (block.type === "text") messages_ += 1;
 		if (block.type !== "toolCall") continue;
-		if (block.toolName === "subagent" || block.toolName.startsWith("subagent_") || block.toolName === "task") {
+		// Same delegation set the subagent card renders: companion tools like
+		// subagent_models are utilities, not spawned agents.
+		if (block.toolName === "subagent" || block.toolName === "task") {
 			subagents += 1;
 		} else {
 			toolCalls += 1;
@@ -74,10 +77,10 @@ export function analyzeTurn(turn: Turn, compact: boolean): TurnFlow {
 /** Fold label: dsh's `N 次工具调用 · M 条消息 · K 个 subagent`, counts in that order. */
 export function foldLabel(counts: TurnFlow["counts"]): string {
 	const parts: string[] = [];
-	if (counts.toolCalls > 0) parts.push(`${counts.toolCalls} 次工具调用`);
-	if (counts.messages > 0) parts.push(`${counts.messages} 条消息`);
-	if (counts.subagents > 0) parts.push(`${counts.subagents} 个 subagent`);
-	return parts.length === 0 ? "已思考" : parts.join(" · ");
+	if (counts.toolCalls > 0) parts.push(t("{toolCalls} 次工具调用", { "toolCalls": counts.toolCalls }));
+	if (counts.messages > 0) parts.push(t("{messages} 条消息", { "messages": counts.messages }));
+	if (counts.subagents > 0) parts.push(t("{subagents} 个 subagent", { "subagents": counts.subagents }));
+	return parts.length === 0 ? t("已思考") : parts.join(" · ");
 }
 
 /** Identity of a block inside a turn, stable across streaming updates of the same position. */

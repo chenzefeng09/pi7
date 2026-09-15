@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Archive } from "libarchive.js";
+import { t } from "../../i18n";
 
 const MAX_ARCHIVE_BYTES = 64 * 1024 * 1024;
 const ARCHIVE_WORKER_URL = new URL("libarchive/worker-bundle.js", document.baseURI).toString();
@@ -108,15 +109,15 @@ export function ArchivePreview({ blob, filename }: { blob: Blob; filename: strin
 		};
 	}, [blob, filename]);
 
-	if (status === "loading") return <div className="p-4 text-[12px] text-[#98a2b3]">读取压缩包目录...</div>;
-	if (status === "error") return <div className="p-4 text-[12px] text-[#f04438]">压缩包过大（上限 64 MB）或格式不受支持。</div>;
+	if (status === "loading") return <div className="p-4 text-[12px] text-[#98a2b3]">{t("读取压缩包目录...")}</div>;
+	if (status === "error") return <div className="p-4 text-[12px] text-[#f04438]">{t("压缩包过大（上限 64 MB）或格式不受支持。")}</div>;
 	const total = entries.reduce((sum, entry) => sum + entry.size, 0);
 	return (
 		<section className="rounded-lg border border-black/[0.06] bg-white p-3">
 			<div className="flex flex-wrap items-center gap-2 text-[11px] text-[#667085]">
-				<span>{entries.length} 个文件 · 解压后 {formatBytes(total)}</span>
-				{encrypted ? <span className="rounded border border-[#f79009]/30 bg-[#fff7e6] px-1.5 py-0.5 text-[#b54708]">含加密内容</span> : null}
-				<span className="text-[#98a2b3]">仅列出目录，未解压文件内容</span>
+				<span>{entries.length} {t("个文件 · 解压后")}{formatBytes(total)}</span>
+				{encrypted ? <span className="rounded border border-[#f79009]/30 bg-[#fff7e6] px-1.5 py-0.5 text-[#b54708]">{t("含加密内容")}</span> : null}
+				<span className="text-[#98a2b3]">{t("仅列出目录，未解压文件内容")}</span>
 			</div>
 			<div className="mt-2 max-h-[calc(100vh-190px)] overflow-auto rounded border border-black/[0.06] bg-[#fafafa] p-2">{renderTree(buildTree(entries), 0)}</div>
 		</section>
