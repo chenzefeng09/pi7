@@ -45,6 +45,15 @@ export function emptyModelDraft(): ModelDraft {
 	return { contextWindow: "", id: "", maxTokens: "", name: "", reasoning: false, sampling: [], vision: false };
 }
 
+/**
+ * A token-count field as models.json wants it: a positive integer, or absent. `Number("abc")`
+ * is NaN, which JSON.stringify would write as `null` — pi then reads a null contextWindow.
+ */
+function tokenCount(value: string): number | undefined {
+	const parsed = Number(value.trim());
+	return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 /** Turn the drafts into the `models.json` shape, dropping empty fields. */
 export function providerPatchOf(draft: ProviderDraft): Record<string, unknown> {
 	return {
@@ -65,10 +74,10 @@ export function providerPatchOf(draft: ProviderDraft): Record<string, unknown> {
 						entry.value.trim() !== "" && Number.isFinite(number) ? number : entry.value;
 				}
 				return {
-					contextWindow: model.contextWindow ? Number(model.contextWindow) : undefined,
+					contextWindow: tokenCount(model.contextWindow),
 					id: model.id.trim(),
 					input: model.vision ? ["text", "image"] : ["text"],
-					maxTokens: model.maxTokens ? Number(model.maxTokens) : undefined,
+					maxTokens: tokenCount(model.maxTokens),
 					name: model.name.trim() || undefined,
 					reasoning: model.reasoning,
 					samplingParams: Object.keys(samplingParams).length > 0 ? samplingParams : undefined,
@@ -369,7 +378,7 @@ export function ProviderEditor({
 									</Field>
 									<Field label={t("上下文长度（tokens）")}>
 										<input
-											className={SETTINGS_INPUT_CLASS}
+											className={`${SETTINGS_INPUT_CLASS} ${model.contextWindow.trim() && tokenCount(model.contextWindow) === undefined ? "border-[#d92d20]" : ""}`}
 											inputMode="numeric"
 											onChange={(event) => patchModel(index, { contextWindow: event.target.value })}
 											placeholder="131072"
@@ -378,7 +387,7 @@ export function ProviderEditor({
 									</Field>
 									<Field label={t("最大输出（tokens）")}>
 										<input
-											className={SETTINGS_INPUT_CLASS}
+											className={`${SETTINGS_INPUT_CLASS} ${model.maxTokens.trim() && tokenCount(model.maxTokens) === undefined ? "border-[#d92d20]" : ""}`}
 											inputMode="numeric"
 											onChange={(event) => patchModel(index, { maxTokens: event.target.value })}
 											placeholder="16384"

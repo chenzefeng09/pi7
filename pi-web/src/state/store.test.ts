@@ -368,6 +368,44 @@ describe("pi store workspace and project-scoped data", () => {
 		expect(usePiStore.getState().status).toBe("idle");
 	});
 
+	it("drops the optimistic streaming mark when pi consumed the prompt without a run", async () => {
+		const calls = stubPi((command) =>
+			command.type === "prompt" ? { data: { sessionId: "s1", started: false }, success: true } : { data: {} },
+		);
+		usePiStore.setState({
+			messageCount: 1,
+			messages: [textMessage("m1", "existing")],
+			sessionCwd: "D:/project",
+			sessionLoading: false,
+			status: "idle",
+		});
+
+		// An `input` extension handler took this one: no slash, no agent turn.
+		const result = await usePiStore.getState().send("handled by an extension");
+
+		expect(result.started).toBe(false);
+		expect(usePiStore.getState().status).toBe("idle");
+		// pi's own word is enough; no get_state poll is needed to find out.
+		expect(calls.map((call) => call.type)).toEqual(["prompt"]);
+	});
+
+	it("keeps streaming when a prompt is queued behind a running turn", async () => {
+		stubPi((command) =>
+			command.type === "prompt" ? { data: { sessionId: "s1", started: false }, success: true } : { data: {} },
+		);
+		usePiStore.setState({
+			messageCount: 1,
+			messages: [textMessage("m1", "existing")],
+			sessionCwd: "D:/project",
+			sessionLoading: false,
+			status: "streaming",
+		});
+
+		await usePiStore.getState().send("follow up", "followUp");
+
+		expect(usePiStore.getState().status).toBe("streaming");
+	});
+
 	it("aborts a background handle without mutating the visible transcript", async () => {
 		const calls = stubPi(() => ({ data: {} }));
 		usePiStore.setState({
@@ -688,14 +726,56 @@ describe("pi store session streaming reconciliation", () => {
 		expect(messages.at(-1)).toMatchObject({ role: "user" });
 	});
 
-	it("does not touch a second step of the same live turn", () => {
+	it("closes the previous step when the next one starts in the same live turn", () => {
 		startStreamingTurn();
-		// A tool round starts the next assistant message while the run is still going.
+		// A tool round starts the next assistant message while the run is still going. Only one
+		// assistant message streams at a time, so the earlier one is over even if its message_end
+		// never reached this window; the run itself stays live.
 		usePiStore.getState().applyEvent({ message: { content: [], role: "assistant" }, type: "message_start" });
 
 		const messages = usePiStore.getState().messages;
-		expect(messages[1].state).toBe("streaming");
+		expect(usePiStore.getState().status).toBe("streaming");
+		expect(messages[1].state).toBe("complete");
+		expect(messages[1].blocks[0]).toMatchObject({ state: "complete", text: "半句" });
 		expect(messages[2]).toMatchObject({ role: "assistant", state: "streaming" });
+	});
+
+	it("keeps extending the partial message a mid-turn transcript read ends with", async () => {
+		// The window opens a session whose turn is already running: get_state says streaming and
+		// get_messages ends with the message pi is still generating.
+		stubPi((command) => {
+			if (command.type === "get_state") {
+				return { data: { isStreaming: true, messageCount: 2, sessionFile: "C:/sessions/a.jsonl", sessionId: "pi-a" } };
+			}
+			if (command.type === "get_messages") {
+				return {
+					data: {
+						messages: [
+							{ content: [{ text: "问", type: "text" }], role: "user" },
+							{ content: [{ text: "前半", type: "text" }], role: "assistant" },
+						],
+					},
+				};
+			}
+			return { data: {} };
+		});
+		await usePiStore.getState().refreshSession();
+		expect(usePiStore.getState().messages.at(-1)).toMatchObject({ role: "assistant", state: "streaming" });
+
+		usePiStore.getState().applyEvent({
+			assistantMessageEvent: { contentIndex: 0, delta: "后半", type: "text_delta" },
+			type: "message_update",
+		});
+		usePiStore.getState().applyEvent({
+			message: { content: [{ text: "前半后半", type: "text" }], role: "assistant", stopReason: "stop" },
+			type: "message_end",
+		});
+
+		const messages = usePiStore.getState().messages;
+		// One answer, not the partial followed by a second copy of the rest.
+		expect(messages.filter((message) => message.role === "assistant")).toHaveLength(1);
+		expect(messages.at(-1)).toMatchObject({ role: "assistant", state: "complete" });
+		expect(messages.at(-1)?.blocks[0]).toMatchObject({ text: "前半后半" });
 	});
 });
 
@@ -1216,6 +1296,60 @@ describe("pi store multi-session slices", () => {
 		useSessionPoolSettings.getState().setMaxOpenSessions(99);
 		expect(useSessionPoolSettings.getState().maxOpenSessions).toBe(MAX_OPEN_SESSIONS);
 		useSessionPoolSettings.getState().setMaxOpenSessions(3);
+	});
+
+	it("renames the visible session through pi, not the file", async () => {
+		const calls = stubPi(() => ({ data: {} }));
+		const diskRenames: string[] = [];
+		window.pi.renameSession = async (path: string) => {
+			diskRenames.push(path);
+		};
+		usePiStore.setState({
+			...backgroundState,
+			sessionFile: "C:/sessions/a.jsonl",
+			sessionName: "旧名",
+		});
+
+		await usePiStore.getState().renameSession("C:/sessions/a.jsonl", "新名字");
+
+		expect(calls).toEqual([expect.objectContaining({ name: "新名字", sessionId: "s1", type: "set_session_name" })]);
+		expect(diskRenames).toEqual([]);
+		expect(usePiStore.getState().sessionName).toBe("新名字");
+	});
+
+	it("renames a background handle's session without touching the visible name", async () => {
+		const calls = stubPi(() => ({ data: {} }));
+		usePiStore.setState({
+			...backgroundState,
+			backgroundSessions: {
+				s2: backgroundSlice({ sessionFile: "C:/sessions/b.jsonl", sessionName: "旧名" }),
+			},
+			sessionFile: "C:/sessions/a.jsonl",
+			sessionName: "可见会话",
+		});
+
+		await usePiStore.getState().renameSession("C:/sessions/b.jsonl", "后台新名");
+
+		expect(calls).toEqual([expect.objectContaining({ name: "后台新名", sessionId: "s2", type: "set_session_name" })]);
+		expect(usePiStore.getState().backgroundSessions.s2.sessionName).toBe("后台新名");
+		expect(usePiStore.getState().sessionName).toBe("可见会话");
+	});
+
+	it("appends to the file only for a session pi has not opened", async () => {
+		const calls = stubPi(() => ({ data: {} }));
+		const diskRenames: string[] = [];
+		window.pi.renameSession = async (path: string) => {
+			diskRenames.push(path);
+		};
+		usePiStore.setState({
+			...backgroundState,
+			sessionFile: "C:/sessions/a.jsonl",
+		});
+
+		await usePiStore.getState().renameSession("C:/sessions/never-opened.jsonl", "落盘");
+
+		expect(calls).toEqual([]);
+		expect(diskRenames).toEqual(["C:/sessions/never-opened.jsonl"]);
 	});
 });
 

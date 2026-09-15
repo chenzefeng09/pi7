@@ -49,6 +49,21 @@ let statsLoadGeneration = 0;
 let forkLoadGeneration = 0;
 let refreshGeneration = 0;
 
+/**
+ * Handles a scheduled task still owns. `enforceSessionPool` evicts any idle handle past the cap,
+ * and a task handle looks idle between `open_session` and its first event — without the pin a user
+ * browsing sessions during task setup could get the run's session closed under it.
+ */
+const pinnedHandles = new Set<string>();
+
+/** Keep `handleId` safe from pool eviction until the returned release runs. */
+export function pinSessionHandle(handleId: string): () => void {
+	pinnedHandles.add(handleId);
+	return () => {
+		pinnedHandles.delete(handleId);
+	};
+}
+
 function nextMessageId(): string {
 	messageCounter += 1;
 	return `msg-${messageCounter}`;
@@ -828,10 +843,18 @@ function toBlocks(content: unknown): MessageBlock[] {
 	}
 	assistantMessageIds.delete(scope);
 	// Same reconciliation for a step pi starts on an idle session: an assistant message that never
-	// closed would otherwise sit above this one showing 正在思考… with no turn behind it.
-	const base = settleDanglingStreams(state.messages, state.status);
+	// closed would otherwise sit above this one showing 正在思考… with no turn behind it. A session
+	// streams one assistant message at a time, so whatever earlier one still carries the mark
+	// (a transcript read mid-turn marks its last message) is over once this step starts.
+	const base = closeStreamingAssistants(settleDanglingStreams(state.messages, state.status));
 	const { messages } = ensureAssistantMessage(scope, base);
 	return { messages };
+}
+
+/** Close every assistant message still marked as streaming; used when the next step begins. */
+function closeStreamingAssistants(messages: ChatMessage[]): ChatMessage[] {
+	if (!messages.some((message) => message.role === "assistant" && message.state === "streaming")) return messages;
+	return settleDanglingStreams(messages, "idle");
 }
 
 function applyMessageUpdate(
@@ -1141,6 +1164,12 @@ export interface PiStore extends PiState {
 	newSession: (parentSession?: string) => Promise<void>;
 	/** Start a new session in a project folder; without one it lands in the current workspace. */
 	newSessionIn: (cwd?: string) => Promise<void>;
+	/**
+	 * Open a fresh session for a scheduled task on its own handle, leaving the visible session
+	 * alone. Returns the handle id the task pins its prompt and watcher to. Only meaningful on a
+	 * multi-session runtime; single-session callers keep the old steal-the-screen path.
+	 */
+	openTaskSession: (cwd?: string) => Promise<string>;
 	negotiateCapabilities: () => Promise<void>;
 	beginSessionSwitch: (session: SessionInfo) => void;
 	reconnect: (options?: { keepSession?: boolean }) => Promise<void>;
@@ -1174,6 +1203,12 @@ export interface PiStore extends PiState {
 	setAutoRetry: (enabled: boolean) => Promise<void>;
 	setFollowUpMode: (mode: "all" | "one-at-a-time") => Promise<void>;
 	setSessionName: (name: string) => Promise<void>;
+	/**
+	 * Rename any session the sidebar can show. Sessions with an open pi handle go through
+	 * `set_session_name` so pi's in-memory state and file tail stay authoritative; sessions
+	 * pi has never opened fall back to appending `session_info` to the file on disk.
+	 */
+	renameSession: (sessionPath: string, name: string) => Promise<void>;
 	setModel: (provider: string, modelId: string, sessionId?: string) => Promise<void>;
 	setSteeringMode: (mode: "all" | "one-at-a-time") => Promise<void>;
 	setThinkingLevel: (level: string, sessionId?: string) => Promise<void>;
@@ -1337,7 +1372,7 @@ export const usePiStore = create<PiStore>((set, get) => ({
 		for (const id of openIds) {
 			const slice = backgroundSessions[id];
 			const queued = (slice?.queue.followUp.length ?? 0) + (slice?.queue.steering.length ?? 0);
-			if (slice?.streaming === true || queued > 0) keep.add(id);
+			if (slice?.streaming === true || queued > 0 || pinnedHandles.has(id)) keep.add(id);
 		}
 		// Most-recently-used first, so the tail goes. Handles the renderer never ordered (the
 		// session pi opened for itself at startup) are placed last and evicted first.
@@ -1414,7 +1449,17 @@ export const usePiStore = create<PiStore>((set, get) => ({
 				}
 			}
 		}
-		set({ messages: settleDanglingStreams(loaded, get().status) });
+		const status = get().status;
+		const last = loaded[loaded.length - 1];
+		// pi keeps the message it is generating in `messages` from its message_start on, so a
+		// transcript read mid-turn ends with that partial message. It has to stay the one the
+		// next message_update extends: registering it here is what stops the reducers from
+		// opening a second assistant message that would repeat the text read so far.
+		if (status === "streaming" && last?.role === "assistant") {
+			last.state = "streaming";
+			assistantMessageIds.set(get().activeHandleId ?? "", last.id);
+		}
+		set({ messages: settleDanglingStreams(loaded, status) });
 	},
 	applyEvent: (raw) => {
 		if (!isRecord(raw)) return;
@@ -1716,13 +1761,17 @@ export const usePiStore = create<PiStore>((set, get) => ({
 			const info = (await window.pi.getRuntimeInfo().catch(() => undefined)) as { cwd?: string } | undefined;
 			if (info?.cwd) set({ sessionCwd: info.cwd });
 		}
-		// Single-session cwd is only known after the runtime info call above; load project-scoped
-		// data afterwards so a stale/undefined cwd cannot select the wrong listing.
-		await get().loadFiles().catch(() => {});
 		await get().loadModels();
 		const levels = await rpc<{ levels?: string[] }>({ type: "get_available_thinking_levels" });
 		if (Array.isArray(levels?.levels)) set({ availableThinkingLevels: levels.levels });
-		await Promise.all([get().loadSessions(), get().loadCommands(), get().loadFiles(), get().loadPackages()]);
+		// Single-session cwd is only known after the runtime info call above; the file listing
+		// runs afterwards so a stale/undefined cwd cannot select the wrong folder.
+		await Promise.all([
+			get().loadSessions(),
+			get().loadCommands(),
+			get().loadFiles().catch(() => {}),
+			get().loadPackages(),
+		]);
 	},
 	// Capability handshake. Everything multi-session stays inert unless the runtime answers
 	// that it can hold several sessions, so an unpatched pi keeps today's single-session flow.
@@ -1915,6 +1964,27 @@ export const usePiStore = create<PiStore>((set, get) => ({
 		await get().loadSessions();
 		get().enforceSessionPool();
 	},
+	// `activate: false` is the whole point: the task's handle opens next to the visible session
+	// instead of replacing it on screen, and its events land in a background slice.
+	openTaskSession: async (cwd) => {
+		const opened = await rpc<OpenSessionData>({
+			type: "open_session",
+			activate: false,
+			...(cwd !== undefined ? { cwd } : {}),
+		});
+		const handleId = opened?.sessionId;
+		if (!handleId) throw new Error("open_session returned no sessionId");
+		set((state) => ({
+			// The slice is created eagerly so the handle counts as known even if the session has
+			// no file on disk yet (registerHandle keys the map by sessionFile).
+			backgroundSessions: state.backgroundSessions[handleId]
+				? state.backgroundSessions
+				: { ...state.backgroundSessions, [handleId]: emptyBackgroundSession() },
+			handles: registerHandle(state.handles, opened),
+			handleOrder: [handleId, ...state.handleOrder.filter((id) => id !== handleId)],
+		}));
+		return handleId;
+	},
 	reconnect: async (options) => {
 		// Remembered before the restart: a restarted process comes up on a fresh session, and in
 		// multi-session mode the one the user was looking at can be opened again right away.
@@ -2073,6 +2143,7 @@ export const usePiStore = create<PiStore>((set, get) => ({
 	},
 	reset: () => {
 		assistantMessageIds.clear();
+		pinnedHandles.clear();
 		turnStartedAt.clear();
 		fileLoadGeneration += 1;
 		commandLoadGeneration += 1;
@@ -2137,6 +2208,7 @@ export const usePiStore = create<PiStore>((set, get) => ({
 			pushNotification(message, "warning");
 			throw new Error(message);
 		}
+		const statusBefore = get().status;
 		if (!targetBackground) set({ error: undefined, status: "streaming" });
 		let started: boolean | undefined;
 		try {
@@ -2156,12 +2228,20 @@ export const usePiStore = create<PiStore>((set, get) => ({
 			pushNotification(t("发送失败：{message}", { "message": message }), "error");
 			throw error;
 		}
-		// Extension slash commands handle the prompt without starting an agent turn, so an
-		// optimistic "streaming" status can be wrong for one. A normal prompt is never reconciled:
-		// right after pi accepts it the run has not started yet, and `get_state` would report
-		// isStreaming false exactly then, clearing the status while the turn is on its way.
-		// A background send never gets the optimistic mark, so there is nothing to reconcile.
-		if (targetBackground || !trimmed.startsWith("/")) return { started };
+		// pi says whether a run follows: `started` is false for a prompt an extension command or
+		// an `input` handler consumed, and for one that was queued behind a running turn. Only the
+		// first kind leaves the optimistic "streaming" mark wrong, and it is told apart by the
+		// session having been idle when the prompt went out — a queued prompt joins a run that was
+		// already showing as streaming. A background send never gets the mark.
+		// Runtimes predating `started` (undefined) fall back to asking pi after a short wait, but
+		// only for slash commands: a normal prompt's run has not started the moment pi accepts it,
+		// so `get_state` would report idle exactly then.
+		if (targetBackground) return { started };
+		if (started === false) {
+			if (statusBefore !== "streaming") set({ status: "idle" });
+			return { started };
+		}
+		if (started === true || !trimmed.startsWith("/")) return { started };
 		try {
 			await new Promise((resolve) => setTimeout(resolve, 400));
 			const state = await rpc<{ isStreaming?: boolean }>({ type: "get_state" });
@@ -2186,6 +2266,33 @@ export const usePiStore = create<PiStore>((set, get) => ({
 		if (!trimmed) return;
 		await rpc({ name: trimmed, type: "set_session_name" });
 		set({ sessionName: trimmed });
+		await get().loadSessions();
+	},
+	renameSession: async (sessionPath, name) => {
+		const trimmed = name.trim();
+		if (!trimmed) return;
+		const key = sessionMapKey(sessionPath);
+		const state = get();
+		const handleId = state.multiSession ? state.handles[key] : undefined;
+		const visible = state.sessionFile !== undefined && sessionMapKey(state.sessionFile) === key;
+		// A session pi has open is renamed through pi: it owns that file's tail and its in-memory
+		// entries, and it is what the header and `session_info_changed` read the name from. Writing
+		// to the file behind its back would leave the header stale and the appended entry off pi's
+		// branch. Only a session no runtime holds is edited on disk.
+		if (handleId !== undefined || visible) {
+			await rpc({ name: trimmed, type: "set_session_name", ...(handleId !== undefined ? { sessionId: handleId } : {}) });
+			if (visible) set({ sessionName: trimmed });
+			else if (handleId !== undefined) {
+				set((current) => {
+					const slice = current.backgroundSessions[handleId];
+					return slice
+						? { backgroundSessions: { ...current.backgroundSessions, [handleId]: { ...slice, sessionName: trimmed } } }
+						: {};
+				});
+			}
+		} else {
+			await window.pi.renameSession(sessionPath, trimmed);
+		}
 		await get().loadSessions();
 	},
 	setModel: async (provider, modelId, sessionId) => {

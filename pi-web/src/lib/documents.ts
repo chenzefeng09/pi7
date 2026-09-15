@@ -99,7 +99,8 @@ export function classifyFileKind(filePath: string): FileKind {
 	const name = filePath.slice(Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\")) + 1).toLowerCase();
 	const dot = name.lastIndexOf(".");
 	const extension = dot < 0 ? "" : name.slice(dot + 1);
-	if (extension in EXTENSION_KINDS) return EXTENSION_KINDS[extension] ?? "other";
+	// `in` would also match prototype keys: "constructor" is no kind of file.
+	if (Object.hasOwn(EXTENSION_KINDS, extension)) return EXTENSION_KINDS[extension] ?? "other";
 	if (/^(readme|changelog|contributing|license)(\.|$)/.test(name)) return "markdown";
 	return "text";
 }

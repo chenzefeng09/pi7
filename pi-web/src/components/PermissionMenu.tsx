@@ -40,10 +40,11 @@ const TONES: Record<PermissionMode, string> = {
  * sends it the mode (`/permission <mode>`). Because that extension is a policy layer rather than a
  * sandbox, the menu says what each mode actually does instead of implying an OS boundary.
  *
- * The gate keeps its mode per pi session and starts unrestricted, so the remembered choice is
- * re-sent for every session the window shows. `lastSent` is the session file plus the mode that
- * was sent for it: a new chat keeps the same file path until pi names it, so keying on the path
- * alone would skip the re-send and leave the new session on the gate's default (完全权限).
+ * The gate keeps its mode per pi session and fails closed at 工作区内修改 until one arrives, so
+ * the remembered choice is re-sent for every session the window shows. `lastSent` is the session
+ * file plus the mode that was sent for it: a new chat keeps the same file path until pi names it,
+ * so keying on the path alone would skip the re-send and leave the new session on the gate's
+ * fallback rather than on the user's pick.
  */
 let lastSent: { key: string; mode: PermissionMode } | undefined;
 

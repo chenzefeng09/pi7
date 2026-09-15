@@ -154,6 +154,7 @@ export function Sidebar() {
 	const clearNotificationHistory = usePiStore((state) => state.clearNotificationHistory);
 	const notificationHistory = usePiStore((state) => state.notificationHistory);
 	const reconnect = usePiStore((state) => state.reconnect);
+	const renameSession = usePiStore((state) => state.renameSession);
 	const sessionFile = usePiStore((state) => state.sessionFile);
 	const sessionId = usePiStore((state) => state.sessionId);
 	const sessionStats = usePiStore((state) => state.sessionStats);
@@ -320,14 +321,15 @@ export function Sidebar() {
 		}
 	};
 
-	const renameSession = async () => {
+	const commitRename = async () => {
 		if (!renameTarget) return;
 		const value = renameTarget.value.trim();
 		if (!value) return;
 		try {
-			await window.pi.renameSession(renameTarget.path, value);
+			// The store decides between pi's `set_session_name` (sessions with an open handle) and
+			// the on-disk append (sessions pi has never opened); see `renameSession` there.
+			await renameSession(renameTarget.path, value);
 			setRenameTarget(null);
-			await loadSessions();
 		} catch (renameError) {
 			setError(renameError instanceof Error ? renameError.message : String(renameError));
 		}
@@ -936,7 +938,7 @@ export function Sidebar() {
 							className="mt-4 h-10 w-full rounded-xl border border-black/[0.1] px-3 text-[14px] text-[#1f2937] outline-none focus:border-[#9fb2a5]"
 							onChange={(event) => setRenameTarget({ ...renameTarget, value: event.target.value })}
 							onKeyDown={(event) => {
-								if (event.key === "Enter") void renameSession();
+								if (event.key === "Enter") void commitRename();
 							}}
 							placeholder={t("会话名称")}
 							value={renameTarget.value}
@@ -944,7 +946,7 @@ export function Sidebar() {
 						<div className="mt-5 flex justify-end gap-2">
 							<button className={buttonClass()} onClick={() => setRenameTarget(null)} type="button">
 								{t("取消")}</button>
-							<button className={buttonClass("primary")} onClick={() => void renameSession()} type="button">
+							<button className={buttonClass("primary")} onClick={() => void commitRename()} type="button">
 								{t("保存")}</button>
 						</div>
 					</>

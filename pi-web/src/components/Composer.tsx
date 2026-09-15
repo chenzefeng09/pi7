@@ -27,8 +27,17 @@ import { QueueDock } from "./QueueDock";
 import { TodoPanel } from "./TodoPanel";
 import { t } from "../i18n";
 
+/** A file mention's worth of prompt: bounded so one attached log cannot burst the RPC line. */
+const FILE_TEXT_LIMIT = 256 * 1024;
+/** Images travel base64 inside the same JSONL command line; keep each well under its cap. */
+const IMAGE_BYTES_LIMIT = 8 * 1024 * 1024;
+
 function readImage(file: File): Promise<ImageAttachment> {
 	return new Promise((resolve, reject) => {
+		if (file.size > IMAGE_BYTES_LIMIT) {
+			reject(new Error(t("{name} 超过 8 MB 图片上限", { "name": file.name })));
+			return;
+		}
 		const reader = new FileReader();
 		reader.onerror = () => reject(reader.error ?? new Error(t("无法读取 {name}", { "name": file.name })));
 		reader.onload = () => {
@@ -123,6 +132,16 @@ export function Composer() {
 		setHighlight(0);
 	}, [commandQuery, fileQuery]);
 
+	// A chip is the chip of its `@path` mention: deleting the mention from the text must retire
+	// the chip too, or buildPrompt would still inject a file the user no longer references.
+	useEffect(() => {
+		setFileAttachments((current) => {
+			const tokens = new Set(text.split(/\s+/));
+			const kept = current.filter((file) => tokens.has(`@${file.path}`));
+			return kept.length === current.length ? current : kept;
+		});
+	}, [text]);
+
 	useEffect(() => {
 		if (!addMenuOpen) return;
 		const closeOnPointerDown = (event: MouseEvent) => {
@@ -171,13 +190,17 @@ export function Composer() {
 				const root = file.root ?? filesRoot;
 				const resolvedPath = root ? `${root.replace(/[\\/]+$/, "")}/${file.path}` : file.path;
 				const result = (await window.pi.readFile(resolvedPath)) as
-					| { data: string; mimeType: string; path: string; type: "image" }
-					| { path: string; text: string; type: "text" };
+					| { data: string; mimeType: string; path: string; truncated?: boolean; type: "image" }
+					| { path: string; text: string; truncated?: boolean; type: "text" };
 				if (result.type === "image") {
 					images.push({ data: result.data, mimeType: result.mimeType, name: file.name });
 					prefix += `<file name="${result.path}"></file>\n`;
 				} else {
-					prefix += `<file name="${result.path}">\n${result.text}\n</file>\n`;
+					const oversized = result.text.length > FILE_TEXT_LIMIT;
+					const body = oversized ? result.text.slice(0, FILE_TEXT_LIMIT) : result.text;
+					// The reader itself also truncates at its own cap; either way the model must know.
+					const marker = oversized || result.truncated ? `\n${t("…[文件过长，已截断]")}` : "";
+					prefix += `<file name="${result.path}">\n${body}${marker}\n</file>\n`;
 				}
 			} catch (error) {
 				prefix += `<file name="${file.path}">Error: ${error instanceof Error ? error.message : String(error)}</file>\n`;
@@ -230,6 +253,20 @@ export function Composer() {
 
 	const focusTextarea = () => {
 		requestAnimationFrame(() => textareaRef.current?.focus());
+	};
+
+	// Each file settles on its own: one oversized image reports an error without dropping the rest.
+	const attachImages = (files: File[]) => {
+		void Promise.all(
+			files.map((file) =>
+				readImage(file).catch((readError: unknown) => {
+					usePiStore.setState({ error: readError instanceof Error ? readError.message : String(readError) });
+					return undefined;
+				}),
+			),
+		).then((images) =>
+			setAttachments((current) => [...current, ...images.filter((image) => image !== undefined)]),
+		);
 	};
 
 	// Goal and plan mode are driven by pi extensions (pi-goal-x, pi-plan-extension).
@@ -430,9 +467,7 @@ export function Composer() {
 							.filter((file): file is File => file !== null);
 						if (imageFiles.length === 0) return;
 						event.preventDefault();
-						void Promise.all(imageFiles.map(readImage)).then((images) =>
-							setAttachments((current) => [...current, ...images]),
-						);
+						attachImages(imageFiles);
 					}}
 				>
 					<input
@@ -442,9 +477,7 @@ export function Composer() {
 						onChange={(event) => {
 							const selected = Array.from(event.target.files ?? []);
 							event.target.value = "";
-							void Promise.all(selected.map(readImage)).then((images) =>
-								setAttachments((current) => [...current, ...images]),
-							);
+							attachImages(selected);
 						}}
 						ref={fileInputRef}
 						type="file"

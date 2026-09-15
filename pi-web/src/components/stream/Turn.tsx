@@ -1,6 +1,6 @@
 import { Check, ChevronDown, Copy, GitFork, Pencil } from "lucide-react";
 import { memo, type ReactNode, useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage, ImageBlock, MessageBlock } from "../../state/types";
 import { buttonClass } from "../buttons";
@@ -41,39 +41,43 @@ const ProcessRow = memo(function ProcessRow({
 	);
 });
 
-function MarkdownBlock({ text }: { text: string }) {
+// Stable props are what make the memo below effective: a fresh plugins array or components map
+// every render would rebuild ReactMarkdown's processor for every block on every streamed token.
+const MARKDOWN_PLUGINS = [remarkGfm];
+
+const MARKDOWN_COMPONENTS: Components = {
+	code({ className, children, ...props }) {
+		const isBlock = typeof className === "string" && className.includes("language-");
+		if (isBlock) {
+			return (
+				<pre className="overflow-x-auto rounded-[12px] border-[0.5px] border-black/[0.06] bg-code p-4 font-mono text-[12px] leading-[19px]">
+					<code className={className} {...props}>
+						{children}
+					</code>
+				</pre>
+			);
+		}
+		return (
+			<code
+				className="rounded-md border-[0.5px] border-black/[0.04] bg-code px-[5px] font-mono text-[12px]"
+				{...props}
+			>
+				{children}
+			</code>
+		);
+	},
+};
+
+// One markdown parse per text, not per render: streamed deltas rebuild only the block they land in.
+const MarkdownBlock = memo(function MarkdownBlock({ text }: { text: string }) {
 	return (
 		<div className="prose-pi">
-			<ReactMarkdown
-				remarkPlugins={[remarkGfm]}
-				components={{
-					code({ className, children, ...props }) {
-						const isBlock = typeof className === "string" && className.includes("language-");
-						if (isBlock) {
-							return (
-								<pre className="overflow-x-auto rounded-[12px] border-[0.5px] border-black/[0.06] bg-code p-4 font-mono text-[12px] leading-[19px]">
-									<code className={className} {...props}>
-										{children}
-									</code>
-								</pre>
-							);
-						}
-						return (
-							<code
-								className="rounded-md border-[0.5px] border-black/[0.04] bg-code px-[5px] font-mono text-[12px]"
-								{...props}
-							>
-								{children}
-							</code>
-						);
-					},
-				}}
-			>
+			<ReactMarkdown remarkPlugins={MARKDOWN_PLUGINS} components={MARKDOWN_COMPONENTS}>
 				{text}
 			</ReactMarkdown>
 		</div>
 	);
-}
+});
 
 /** One image of an answer; a user prompt's images render as its attachment row instead. */
 function isImage(block: MessageBlock): block is ImageBlock {

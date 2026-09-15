@@ -1,5 +1,5 @@
 ﻿import { create } from "zustand";
-import { hasWorkspaceForPrompt, usePiStore } from "./store";
+import { hasWorkspaceForPrompt, pinSessionHandle, usePiStore } from "./store";
 import { t } from "../i18n";
 
 export type ScheduledTaskStatus = "pending" | "running" | "paused" | "completed" | "error";
@@ -214,6 +214,20 @@ function samePath(left: string | undefined, right: string | undefined): boolean 
 	return normalize(left) === normalize(right);
 }
 
+/**
+ * True when the task's run happens on whatever session is on screen: always on a
+ * single-session runtime (there is only the one handle), and on a multi-session runtime when
+ * the task targets the visible session itself. Only such a task has to wait for the visible
+ * session to go idle — a prompt sent mid-turn just queues behind the user's run, and the
+ * watcher below cannot tell the user's turn from the queued one. Tasks with a session of
+ * their own never wait on the screen.
+ */
+export function taskRunsOnVisibleSession(task: ScheduledTask): boolean {
+	const state = usePiStore.getState();
+	if (!state.multiSession) return true;
+	return task.runTarget === "current" && (!task.project || samePath(state.sessionCwd, task.project));
+}
+
 interface TaskSessionView {
 	error?: string;
 	/** The handle is gone entirely: closed or lost with a process exit. */
@@ -263,20 +277,37 @@ export async function runScheduledTask(id: string): Promise<void> {
 	const abortGeneration = usePiStore.getState().abortGeneration;
 	useScheduledTaskStore.getState().updateTask(id, { error: undefined, status: "running" });
 	const title = task.prompt.split("\n")[0].slice(0, 40);
+	let releaseHandlePin: (() => void) | undefined;
 	try {
 		const pi = usePiStore.getState();
-		if (task.project) {
-			const currentCwd = usePiStore.getState().sessionCwd;
-			if (!samePath(currentCwd, task.project) || task.runTarget === "new") await pi.newSessionIn(task.project);
+		const state = usePiStore.getState();
+		// "current" reuses the session on screen only when the task has no project of its own
+		// (or the same one). Every other case gets a session of its own: on a multi-session
+		// runtime that opens on a background handle and the user keeps looking at what they
+		// were looking at — the old path made the task steal the screen mid-typing.
+		const reuseVisible =
+			task.runTarget === "current" && (!task.project || samePath(state.sessionCwd, task.project));
+		let taskHandle: string | undefined;
+		if (reuseVisible) {
+			taskHandle = state.activeHandleId;
+		} else if (state.multiSession) {
+			taskHandle = await pi.openTaskSession(task.project ?? state.sessionCwd);
+			// The task session file exists already, so the sidebar can list it while it runs.
+			void pi.loadSessions().catch(() => {});
+		} else {
+			// One runtime only: the task has nowhere but the visible session to go.
+			if (task.project) await pi.newSessionIn(task.project);
+			else await pi.newSession();
+			taskHandle = usePiStore.getState().activeHandleId;
 		}
-		if (taskRunGenerations.get(id) !== runGeneration) return;
-		if (task.runTarget === "new" && !task.project) await pi.newSession();
 		if (taskRunGenerations.get(id) !== runGeneration) return;
 		// The prompt and the whole wait below stay pinned to this handle: the user is free to
 		// switch sessions while the task runs, and none of that may redirect the run or fool
 		// the watcher into reading another session's status.
-		const taskHandle = usePiStore.getState().activeHandleId;
-		if (taskHandle) taskHandles.set(id, taskHandle);
+		if (taskHandle) {
+			taskHandles.set(id, taskHandle);
+			releaseHandlePin = pinSessionHandle(taskHandle);
+		}
 		// Model and thinking changes are scoped to the task's handle too: an untagged command
 		// resolves to whatever session is active when it lands, so a mid-setup session switch
 		// would otherwise apply the task's model to the session the user just opened.
@@ -351,6 +382,7 @@ export async function runScheduledTask(id: string): Promise<void> {
 		useScheduledTaskStore.getState().updateTask(id, { error: message, status: "error" });
 		pushNotification(t("定时任务「{title}」失败：{message}", { "title": title, "message": message }), "error");
 	} finally {
+		releaseHandlePin?.();
 		runningTasks.delete(id);
 		taskHandles.delete(id);
 		if (taskRunGenerations.get(id) === runGeneration) taskRunGenerations.delete(id);

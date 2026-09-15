@@ -42,6 +42,20 @@ describe("EventBatcher", () => {
 		expect(flush).toHaveBeenCalledTimes(1);
 	});
 
+	it("flushes without a frame once the buffer is full", () => {
+		const flush = vi.fn();
+		const batcher = new EventBatcher({
+			flush,
+			// The window being hidden is exactly when no frame ever arrives.
+			schedule: () => 1,
+		});
+		for (let index = 0; index < 200; index += 1) batcher.push({ index });
+		expect(flush).toHaveBeenCalledTimes(1);
+		expect(flush.mock.calls[0][0]).toHaveLength(200);
+		batcher.push({ index: 200 });
+		expect(flush).toHaveBeenCalledTimes(1);
+	});
+
 	it("drops buffered events on dispose", () => {
 		const flush = vi.fn();
 		const batcher = new EventBatcher({

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { pauseScheduledTask, runScheduledTask, useScheduledTaskStore } from "./scheduled-tasks";
+import { pauseScheduledTask, runScheduledTask, taskRunsOnVisibleSession, useScheduledTaskStore } from "./scheduled-tasks";
 import { usePiStore } from "./store";
 import type { BackgroundSession, ChatMessage } from "./types";
 
@@ -136,6 +136,74 @@ describe("scheduled tasks", () => {
 		]);
 		await running;
 		expect(taskStatus(task.id)).toBe("completed");
+	});
+
+	it("runs a new-session task on its own handle without touching the visible session", async () => {
+		const calls = stubPi((command) => {
+			if (command.type === "open_session") {
+				return {
+					data: { cwd: "D:/proj", sessionFile: "D:/proj/task.jsonl", sessionId: "s-task2" },
+					success: true,
+				};
+			}
+			if (command.type === "prompt") {
+				return { data: { sessionId: "s-task2", started: true }, success: true };
+			}
+			return { data: {} };
+		});
+		boundSessionState();
+		useScheduledTaskStore.getState().addTask("nightly report", { repeat: "once", runTarget: "new" });
+		const task = useScheduledTaskStore.getState().tasks[0];
+
+		const running = runScheduledTask(task.id);
+		await vi.waitFor(() => expect(calls.some((call) => call.type === "prompt")).toBe(true));
+
+		// The task session opens next to the visible one, not over it.
+		expect(calls.find((call) => call.type === "open_session")).toMatchObject({
+			activate: false,
+			cwd: "D:/proj",
+		});
+		expect(usePiStore.getState().activeHandleId).toBe("s-task");
+		expect(calls.find((call) => call.type === "prompt")).toMatchObject({ sessionId: "s-task2" });
+
+		usePiStore.setState((state) => ({
+			backgroundSessions: {
+				...state.backgroundSessions,
+				"s-task2": slice({ status: "streaming", streaming: true }),
+			},
+		}));
+		await new Promise((resolve) => setTimeout(resolve, 400));
+		usePiStore.setState((state) => ({
+			backgroundSessions: {
+				...state.backgroundSessions,
+				"s-task2": {
+					...state.backgroundSessions["s-task2"],
+					messages: [userMessage("u1", "nightly report"), assistantMessage("a1", "done", "complete")],
+					status: "idle",
+					streaming: false,
+				},
+			},
+		}));
+		await running;
+		expect(taskStatus(task.id)).toBe("completed");
+	});
+
+	it("only tasks bound to the visible session wait for it to go idle", () => {
+		boundSessionState();
+		useScheduledTaskStore.getState().addTask("in this session", { runTarget: "current" });
+		useScheduledTaskStore.getState().addTask("own session", { runTarget: "new" });
+		useScheduledTaskStore.getState().addTask("other project", { project: "D:/other", runTarget: "current" });
+		useScheduledTaskStore.getState().addTask("same project", { project: "D:/proj", runTarget: "current" });
+		const [inThis, own, otherProject, sameProject] = useScheduledTaskStore.getState().tasks;
+
+		expect(taskRunsOnVisibleSession(inThis)).toBe(true);
+		expect(taskRunsOnVisibleSession(own)).toBe(false);
+		expect(taskRunsOnVisibleSession(otherProject)).toBe(false);
+		expect(taskRunsOnVisibleSession(sameProject)).toBe(true);
+
+		// A single-session runtime has no other handle: every task shares the screen.
+		usePiStore.setState({ multiSession: false });
+		expect(taskRunsOnVisibleSession(own)).toBe(true);
 	});
 
 	it("pauses by aborting the task's own handle, not the session on screen", async () => {

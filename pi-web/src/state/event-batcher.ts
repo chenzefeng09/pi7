@@ -4,6 +4,13 @@ export interface EventBatcherOptions {
 	schedule?: (callback: () => void) => number;
 }
 
+/**
+ * At most this many events wait for the next frame. `requestAnimationFrame` never fires while
+ * the window is hidden, so without the bound a stream of `message_update`s — each carrying the
+ * full message so far — would pile up quadratically until the user came back.
+ */
+const MAX_BUFFERED_EVENTS = 200;
+
 export class EventBatcher {
 	private buffer: unknown[] = [];
 	private handle: number | undefined;
@@ -23,6 +30,10 @@ export class EventBatcher {
 
 	push(event: unknown): void {
 		this.buffer.push(event);
+		if (this.buffer.length >= MAX_BUFFERED_EVENTS) {
+			this.flushNow();
+			return;
+		}
 		if (this.handle !== undefined) return;
 		this.handle = this.schedule(() => {
 			this.handle = undefined;

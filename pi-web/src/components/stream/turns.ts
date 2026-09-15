@@ -14,6 +14,11 @@ export interface Turn {
  * pi ends an assistant message at every tool call, so one answer arrives as several consecutive
  * assistant messages. A turn — what the conversation flow shows as one block — is that whole run,
  * bounded by user messages.
+ *
+ * Turn objects are reused across calls when their messages did not change: a streamed delta
+ * rebuilds only the tail turn it lands in, and the memoized TurnViews of every earlier turn skip
+ * re-rendering. Reuse compares message object identity, which is safe because the store updates
+ * messages immutably.
  */
 export function groupTurns(messages: ChatMessage[]): Turn[] {
 	const turns: Turn[] = [];
@@ -25,8 +30,19 @@ export function groupTurns(messages: ChatMessage[]): Turn[] {
 		}
 		turns.push({ id: message.id, messages: [message], role: message.role });
 	}
+	for (let index = 0; index < turns.length; index += 1) {
+		const old = lastGrouping?.[index];
+		const turn = turns[index];
+		if (!old || old.id !== turn.id || old.role !== turn.role || old.messages.length !== turn.messages.length) {
+			continue;
+		}
+		if (turn.messages.every((message, position) => message === old.messages[position])) turns[index] = old;
+	}
+	lastGrouping = turns;
 	return turns;
 }
+
+let lastGrouping: Turn[] | undefined;
 
 export interface TurnFlow {
 	/** Blocks after the last tool call of the final step: the answer itself. */

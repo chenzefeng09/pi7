@@ -11,15 +11,34 @@ import { groupTurns, promptEntryIds, type Turn } from "./stream/turns";
 import { type RailMark, TurnRail } from "./TurnRail";
 import { t } from "../i18n";
 
-/** Flattened answer text of a turn, for the rail's preview: one line of prompt, a few of the answer. */
+/**
+ * The rail's preview shows one line of prompt and three of the answer; anything past this is
+ * never displayed, so flattening stops once enough text is collected.
+ */
+const RAIL_TEXT_LIMIT = 400;
+
+/**
+ * Flattened text of a turn, cached on the turn object itself. `groupTurns` keeps a turn's
+ * identity while its messages stay unchanged, so a streamed delta re-derives only the tail
+ * turn's mark instead of re-flattening the whole transcript.
+ */
+const railTextCache = new WeakMap<Turn, string>();
+
 function turnText(turn: Turn): string {
-	return turn.messages
-		.flatMap((message) => message.blocks)
-		.filter((block) => block.type === "text")
-		.map((block) => (block.type === "text" ? block.text : ""))
-		.join(" ")
-		.replace(/\s+/g, " ")
-		.trim();
+	const cached = railTextCache.get(turn);
+	if (cached !== undefined) return cached;
+	let collected = "";
+	for (const message of turn.messages) {
+		for (const block of message.blocks) {
+			if (block.type !== "text") continue;
+			collected += collected ? ` ${block.text}` : block.text;
+			if (collected.length >= RAIL_TEXT_LIMIT) break;
+		}
+		if (collected.length >= RAIL_TEXT_LIMIT) break;
+	}
+	const text = collected.replace(/\s+/g, " ").trim();
+	railTextCache.set(turn, text);
+	return text;
 }
 
 const SUGGESTIONS = [
