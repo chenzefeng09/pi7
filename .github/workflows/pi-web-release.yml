@@ -90,4 +90,4 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME}"
           gh release create "$TAG" --title "π7 ${TAG}" --generate-notes 2>/dev/null || true
-          gh release upload "$TAG" release/* --clobber
+          find release -maxdepth 1 -type f -print0 | xargs -0 gh release upload "$TAG" --clobber
