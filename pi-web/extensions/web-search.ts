@@ -16,6 +16,31 @@ interface SearchDetails {
 const USER_AGENT =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36";
 
+/** A page bigger than this is cut off mid-download: `response.text()` would buffer all of it. */
+const MAX_BODY_BYTES = 2 * 1024 * 1024;
+
+/** Decode the response body, stopping the download once `limit` bytes have arrived. */
+async function readBodyText(response: Response, limit: number): Promise<string> {
+	const body = response.body;
+	if (!body) return response.text();
+	const reader = body.getReader();
+	const decoder = new TextDecoder();
+	let text = "";
+	let received = 0;
+	try {
+		while (received < limit) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			received += value.byteLength;
+			text += decoder.decode(value, { stream: true });
+		}
+	} finally {
+		// Cancel whatever is still in flight: nothing past the cap gets decoded anyway.
+		await reader.cancel().catch(() => {});
+	}
+	return text + decoder.decode();
+}
+
 function decodeHtml(text: string): string {
 	const entities: Record<string, string> = {
 		"&amp;": "&",
@@ -49,9 +74,13 @@ function normalizeUrl(url: string): string {
 	return decoded;
 }
 
-async function fetchText(url: string, timeoutMs = 15000): Promise<string> {
+async function fetchText(url: string, timeoutMs = 15000, signal?: AbortSignal): Promise<string> {
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), timeoutMs);
+	// The tool's own abort counts too: a stopped turn must not leave a download running.
+	const onAbort = () => controller.abort();
+	if (signal?.aborted) controller.abort();
+	else signal?.addEventListener("abort", onAbort, { once: true });
 	try {
 		const response = await fetch(url, {
 			headers: {
@@ -61,9 +90,10 @@ async function fetchText(url: string, timeoutMs = 15000): Promise<string> {
 			signal: controller.signal,
 		});
 		if (!response.ok) throw new Error(`HTTP ${response.status}`);
-		return await response.text();
+		return await readBodyText(response, MAX_BODY_BYTES);
 	} finally {
 		clearTimeout(timeout);
+		signal?.removeEventListener("abort", onAbort);
 	}
 }
 
@@ -96,14 +126,14 @@ function parseBing(html: string, maxResults: number): SearchResult[] {
 	return results;
 }
 
-async function searchWeb(query: string, maxResults: number): Promise<SearchDetails> {
+async function searchWeb(query: string, maxResults: number, signal?: AbortSignal): Promise<SearchDetails> {
 	const encoded = encodeURIComponent(query);
 	try {
-		const html = await fetchText(`https://html.duckduckgo.com/html/?q=${encoded}`);
+		const html = await fetchText(`https://html.duckduckgo.com/html/?q=${encoded}`, 15000, signal);
 		const results = parseDuckDuckGo(html, maxResults);
 		if (results.length > 0) return { provider: "duckduckgo", query, results };
 	} catch {}
-	const html = await fetchText(`https://www.bing.com/search?q=${encoded}&count=${maxResults}`);
+	const html = await fetchText(`https://www.bing.com/search?q=${encoded}&count=${maxResults}`, 15000, signal);
 	const results = parseBing(html, maxResults);
 	if (results.length === 0) throw new Error(`No search results found for "${query}"`);
 	return { provider: "bing", query, results };
@@ -136,7 +166,7 @@ export default function webSearch(pi: ExtensionAPI) {
 				};
 			}
 			const maxResults = Math.min(10, Math.max(1, Math.floor(params.maxResults ?? 5)));
-			const details = await searchWeb(query, maxResults);
+			const details = await searchWeb(query, maxResults, signal);
 			return {
 				content: [{ type: "text", text: formatResults(details) }],
 				details,
@@ -161,7 +191,7 @@ export default function webSearch(pi: ExtensionAPI) {
 				throw new Error("web_fetch only supports http and https URLs");
 			}
 			const maxChars = Math.min(50000, Math.max(1000, Math.floor(params.maxChars ?? 20000)));
-			const html = await fetchText(url.toString(), 20000);
+			const html = await fetchText(url.toString(), 20000, signal);
 			const text = stripTags(html).slice(0, maxChars);
 			return {
 				content: [{ type: "text", text }],

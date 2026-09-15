@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { syncBundledAgentDir } from "./config";
+import { resolvePiWin7Config, syncBundledAgentDir } from "./config";
 
 let bundled = "";
 let target = "";
@@ -79,5 +79,36 @@ describe("syncBundledAgentDir", () => {
 		write(target, "extensions/pi-todo/src/user-note.ts", "// user file inside package");
 		syncBundledAgentDir(bundled, target);
 		expect(existsSync(join(target, "extensions/pi-todo/src/user-note.ts"))).toBe(true);
+	});
+});
+
+describe("resolvePiWin7Config (unpackaged)", () => {
+	const env = { PI_CODING_AGENT_DIR: "" };
+
+	it("prefers the synced runtime under resources/pi-win7", () => {
+		const cli = process.platform === "win32" ? "cli.win7.js" : "cli.js";
+		write(target, `resources/pi-win7/app/node_modules/@earendil-works/pi-coding-agent/dist/${cli}`, "");
+		const config = resolvePiWin7Config({ appRoot: target, env, isPackaged: false, resourcesPath: "" });
+		expect(config.cliPath).toBe(
+			join(target, "resources", "pi-win7", "app", "node_modules", "@earendil-works", "pi-coding-agent", "dist", cli),
+		);
+		// No bundled node next to it: whatever `node` is on PATH runs the CLI.
+		expect(config.nodePath).toBe("node");
+	});
+
+	it("falls back to the monorepo build output", () => {
+		const config = resolvePiWin7Config({ appRoot: target, env, isPackaged: false, resourcesPath: "" });
+		expect(config.cliPath).toBe(join(target, "..", "packages", "coding-agent", "dist", "cli.js"));
+	});
+
+	it("lets PI_WIN7_CLI / PI_WIN7_NODE override both", () => {
+		const config = resolvePiWin7Config({
+			appRoot: target,
+			env: { ...env, PI_WIN7_CLI: "/x/cli.js", PI_WIN7_NODE: "/x/node" },
+			isPackaged: false,
+			resourcesPath: "",
+		});
+		expect(config.cliPath).toBe("/x/cli.js");
+		expect(config.nodePath).toBe("/x/node");
 	});
 });

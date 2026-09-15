@@ -117,13 +117,33 @@ export function syncBundledAgentDir(bundledAgentDir: string, agentDir: string): 
 	}
 }
 
-const DEV_NODE = "C:\\Users\\27581\\AppData\\Local\\nvm\\v16.20.2\\node.exe";
-const DEV_CLI =
-	"C:\\Users\\27581\\AppData\\Local\\Temp\\pi-win7-app-20260910000203\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli.win7.js";
+const RUNTIME_CLI_RELATIVE = ["app", "node_modules", "@earendil-works", "pi-coding-agent", "dist"];
+
+/**
+ * Where an unpackaged (dev) app finds pi when PI_WIN7_CLI / PI_WIN7_NODE are not set.
+ *
+ * First choice is the synced runtime under `<pi-web>/resources/pi-win7` — the same layout the
+ * packaged app ships, which is what `npm run build:runtime` produces. Failing that, the monorepo
+ * build output `packages/coding-agent/dist/cli.js` run by whatever `node` is on PATH.
+ */
+function resolveDevRuntime(appRoot: string): { cliPath: string; nodePath: string } {
+	const isWin = process.platform === "win32";
+	const runtimeRoot = path.join(appRoot, "resources", "pi-win7");
+	const runtimeCli = path.join(runtimeRoot, ...RUNTIME_CLI_RELATIVE, isWin ? "cli.win7.js" : "cli.js");
+	const runtimeNode = path.join(runtimeRoot, "node", isWin ? "node.exe" : "node");
+	if (fs.existsSync(runtimeCli)) {
+		return { cliPath: runtimeCli, nodePath: fs.existsSync(runtimeNode) ? runtimeNode : "node" };
+	}
+	return {
+		cliPath: path.join(appRoot, "..", "packages", "coding-agent", "dist", "cli.js"),
+		nodePath: fs.existsSync(runtimeNode) ? runtimeNode : "node",
+	};
+}
 
 export function resolvePiWin7Config(options: ResolvePiWin7ConfigOptions): PiWin7Config {
 	const env = options.env ?? process.env;
 	const args = env.PI_WEB_NO_SESSION === "1" ? ["--mode", "rpc", "--no-session"] : ["--mode", "rpc"];
+	const appRoot = options.appRoot ?? env.PI_WEB_APP_ROOT ?? process.cwd();
 	const portableAgentDir = resolvePortableAgentDir(options);
 	const homeAgentDir = path.join(os.homedir(), ".pi", "agent");
 	const fromEnv = typeof env.PI_CODING_AGENT_DIR === "string" && env.PI_CODING_AGENT_DIR.length > 0;
@@ -146,27 +166,20 @@ export function resolvePiWin7Config(options: ResolvePiWin7ConfigOptions): PiWin7
 			agentDir,
 			agentDirSource,
 			args,
-			cliPath: path.join(
-				root,
-				"app",
-				"node_modules",
-				"@earendil-works",
-				"pi-coding-agent",
-				"dist",
-				isWin ? "cli.win7.js" : "cli.js",
-			),
+			cliPath: path.join(root, ...RUNTIME_CLI_RELATIVE, isWin ? "cli.win7.js" : "cli.js"),
 			cwd: env.PI_WORKSPACE_CWD ?? process.cwd(),
 			nodePath: path.join(root, "node", isWin ? "node.exe" : "node"),
 			portableAgentDir,
 		};
 	}
+	const dev = resolveDevRuntime(appRoot);
 	return {
 		agentDir,
 		agentDirSource,
 		args,
-		cliPath: env.PI_WIN7_CLI ?? DEV_CLI,
+		cliPath: env.PI_WIN7_CLI ?? dev.cliPath,
 		cwd: env.PI_WORKSPACE_CWD ?? process.cwd(),
-		nodePath: env.PI_WIN7_NODE ?? DEV_NODE,
+		nodePath: env.PI_WIN7_NODE ?? dev.nodePath,
 		portableAgentDir,
 	};
 }

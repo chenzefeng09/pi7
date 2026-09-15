@@ -126,6 +126,13 @@ async function installNodeBinary() {
 function installApp() {
 	mkdirSync(appDir, { recursive: true });
 	copyFileSync(join(repoRoot, "packages", "coding-agent", "win7", "package.json"), join(appDir, "package.json"));
+	// pi-ai's compiled output uses `with { type: "json" }` import attributes, which the
+	// bundled Node 16 cannot parse. Inline the JSON catalogs before packing (see
+	// packages/coding-agent/docs/win7.md); the patch only touches the built dist tree.
+	run(process.execPath, [
+		join(repoRoot, "packages", "coding-agent", "win7", "patch-ai-json-imports.mjs"),
+		join(repoRoot, "packages", "ai", "dist"),
+	]);
 	packPackage("packages/ai", "pi-ai.tgz");
 	packPackage("packages/tui", "pi-tui.tgz");
 	packPackage("packages/coding-agent", "pi-coding-agent.tgz");

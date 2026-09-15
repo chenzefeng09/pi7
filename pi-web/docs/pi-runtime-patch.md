@@ -35,14 +35,16 @@
 cd D:\chenzefeng\Develop\pi\packages\coding-agent
 npm run build:unbundled
 
-# 2) 把编译产物同步进随应用打包的运行时，以及 dev 模式实际使用的暂存目录
+# 2) 把编译产物同步进随应用打包的运行时（dev 模式默认也从这里启动 pi）
 cd D:\chenzefeng\Develop\pi\pi-web
-$env:PI_WIN7_CLI="C:\Users\27581\AppData\Local\Temp\pi-win7-app-20260910000203\node_modules\@earendil-works\pi-coding-agent\dist\cli.win7.js"
 node scripts\sync-pi-runtime.mjs            # 加 --dry-run 先看会覆盖哪些文件
 ```
 
-`sync-pi-runtime.mjs` 只复制两处目标里**已存在**的文件，不动 node_modules 的其余部分；
-`PI_WIN7_CLI` 未设置时只同步 `resources/pi-win7`（打包用），dev 模式仍需单独同步暂存目录。
+`sync-pi-runtime.mjs` 只复制目标里**已存在**的文件，不动 node_modules 的其余部分。
+
+dev 模式（未打包）的 pi 位置按以下顺序解析：`PI_WIN7_CLI` / `PI_WIN7_NODE` 环境变量 →
+`pi-web/resources/pi-win7`（与打包一致的布局）→ 仓库内 `packages/coding-agent/dist/cli.js` + PATH 上的 `node`。
+另有一个暂存目录时，设置 `PI_WIN7_CLI` 指向其 `dist/cli.win7.js`，`sync-pi-runtime.mjs` 会连它一起同步。
 
 `npm run package` 会先跑 `prepare:resources`，其中有一道**硬检查**：随包运行时里若缺少
 `multiSession`（即补丁没同步），打包直接失败并打印上面的步骤。确实要在缺补丁的情况下打包

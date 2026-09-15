@@ -68,6 +68,28 @@ function readJson(file: string): Record<string, unknown> {
 	}
 }
 
+/**
+ * Like readJson, but a file that exists and does not parse is an error rather than `{}`.
+ *
+ * Writers merge into what they read; treating a corrupt settings.json as empty would write back
+ * only the patched fields and silently drop everything else the user had in it.
+ */
+function readJsonForWrite(file: string): Record<string, unknown> {
+	let text: string;
+	try {
+		text = fs.readFileSync(file, "utf8");
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+		throw error;
+	}
+	if (!text.trim()) return {};
+	const parsed = JSON.parse(text) as unknown;
+	if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+		throw new Error(t("{file} 不是 JSON 对象，已停止写入以免覆盖。", { file }));
+	}
+	return parsed as Record<string, unknown>;
+}
+
 /** Write through a temporary file so a crash cannot leave a half-written config behind. */
 function writeJson(file: string, value: unknown): void {
 	fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -164,7 +186,7 @@ export function writeModelConfig(agentDir: string, patch: ModelConfigPatch): Mod
 		patch.enabledModels !== undefined
 	) {
 		// Read-modify-write: everything the app does not manage (theme, packages, shellPath) stays.
-		const settings = readJson(files.settings);
+		const settings = readJsonForWrite(files.settings);
 		if (patch.defaultModel !== undefined) settings.defaultModel = patch.defaultModel;
 		if (patch.defaultProvider !== undefined) settings.defaultProvider = patch.defaultProvider;
 		if (patch.defaultThinkingLevel !== undefined) settings.defaultThinkingLevel = patch.defaultThinkingLevel;
@@ -172,7 +194,7 @@ export function writeModelConfig(agentDir: string, patch: ModelConfigPatch): Mod
 		writeJson(files.settings, settings);
 	}
 	if (patch.providers !== undefined) {
-		const modelsFile = readJson(files.models);
+		const modelsFile = readJsonForWrite(files.models);
 		const providers =
 			typeof modelsFile.providers === "object" && modelsFile.providers !== null
 				? (modelsFile.providers as Record<string, unknown>)
@@ -310,7 +332,12 @@ export function importModelConfig(agentDir: string, document: unknown): ImportSu
 	}
 
 	const files = agentFiles(agentDir);
-	const models = readJson(files.models);
+	let models: Record<string, unknown>;
+	try {
+		models = readJsonForWrite(files.models);
+	} catch (error) {
+		return { ...empty, error: error instanceof Error ? error.message : String(error) };
+	}
 	const providers =
 		typeof models.providers === "object" && models.providers !== null
 			? (models.providers as Record<string, unknown>)
@@ -341,7 +368,13 @@ export function importModelConfig(agentDir: string, document: unknown): ImportSu
 	let defaultsApplied = false;
 	const defaults = bundle.defaults;
 	if (defaults && typeof defaults === "object") {
-		const settings = readJson(files.settings);
+		let settings: Record<string, unknown>;
+		try {
+			settings = readJsonForWrite(files.settings);
+		} catch (error) {
+			// The providers above did land; only the defaults were refused.
+			return { added, defaultsApplied, error: error instanceof Error ? error.message : String(error), keptKeys, replaced };
+		}
 		if (typeof defaults.provider === "string" && typeof defaults.model === "string" && defaults.model) {
 			settings.defaultProvider = defaults.provider;
 			settings.defaultModel = defaults.model;

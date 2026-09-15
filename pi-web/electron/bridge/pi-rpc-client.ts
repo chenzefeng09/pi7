@@ -8,6 +8,8 @@ interface PendingRequest {
 }
 
 const MAX_RPC_LINE_LENGTH = 16 * 1024 * 1024;
+/** How long a stopped pi gets to run its shutdown hooks before it is killed. */
+const STOP_GRACE_MS = 3000;
 
 export interface PiRpcClientOptions {
 	args: string[];
@@ -19,6 +21,8 @@ export interface PiRpcClientOptions {
 
 export class PiRpcClient extends EventEmitter {
 	private buffer = "";
+	/** Offset of the first unscanned character in `buffer`, so a long line is scanned once. */
+	private scanFrom = 0;
 	private child: ChildProcessWithoutNullStreams | undefined;
 	private nextId = 1;
 	private readonly pending = new Map<string, PendingRequest>();
@@ -35,6 +39,7 @@ export class PiRpcClient extends EventEmitter {
 	start(): void {
 		if (this.child) return;
 		this.buffer = "";
+		this.scanFrom = 0;
 		const child = spawn(this.options.nodePath, [this.options.cliPath, ...this.options.args], {
 			cwd: this.options.cwd,
 			env: {
@@ -60,10 +65,13 @@ export class PiRpcClient extends EventEmitter {
 			this.emit("error", error);
 			this.rejectAll(error);
 		});
-		child.on("exit", (code, signal) => {
+		// `close` rather than `exit`: stdout can still deliver the last response line after the
+		// process itself has exited, and clearing the buffer on `exit` would drop it.
+		child.on("close", (code, signal) => {
 			if (this.child !== child) return;
 			this.child = undefined;
 			this.buffer = "";
+			this.scanFrom = 0;
 			const stopped = this.stoppedChildren.has(child);
 			this.stoppedChildren.delete(child);
 			const error = new Error(
@@ -107,32 +115,55 @@ export class PiRpcClient extends EventEmitter {
 		}
 	}
 
-	stop(): void {
+	/**
+	 * Stop pi. Closing stdin is what pi's RPC mode treats as a shutdown request: it runs the
+	 * extensions' `session_shutdown` hooks, kills the bash children it tracks and flushes stdout.
+	 * A hard kill is only the fallback for a process that does not leave on its own.
+	 */
+	stop(): Promise<void> {
 		const child = this.child;
 		this.child = undefined;
-		if (child) {
-			this.stoppedChildren.add(child);
-			child.stdin.end();
-			child.kill();
-		}
 		this.rejectAll(new Error("pi rpc client stopped"));
+		if (!child) return Promise.resolve();
+		this.stoppedChildren.add(child);
+		return new Promise<void>((resolve) => {
+			if (child.exitCode !== null || child.signalCode !== null) {
+				resolve();
+				return;
+			}
+			const timer = setTimeout(() => {
+				child.kill();
+			}, STOP_GRACE_MS);
+			child.once("close", () => {
+				clearTimeout(timer);
+				resolve();
+			});
+			// stdin may already be gone if the process died on its own; that is not an error here.
+			child.stdin.on("error", () => {});
+			child.stdin.end();
+		});
 	}
 
 	private handleStdout(chunk: string): void {
 		this.buffer += chunk;
-		const firstNewline = this.buffer.indexOf("\n");
-		if (firstNewline < 0 && this.buffer.length > MAX_RPC_LINE_LENGTH) {
-			this.failProtocol(new Error(`pi rpc line exceeds ${MAX_RPC_LINE_LENGTH} characters`));
-			return;
-		}
-		let index: number;
-		while ((index = this.buffer.indexOf("\n")) >= 0) {
-			if (index > MAX_RPC_LINE_LENGTH) {
+		let lineStart = 0;
+		while (true) {
+			const index = this.buffer.indexOf("\n", this.scanFrom);
+			if (index < 0) {
+				this.buffer = lineStart > 0 ? this.buffer.slice(lineStart) : this.buffer;
+				this.scanFrom = this.buffer.length;
+				if (this.buffer.length > MAX_RPC_LINE_LENGTH) {
+					this.failProtocol(new Error(`pi rpc line exceeds ${MAX_RPC_LINE_LENGTH} characters`));
+				}
+				return;
+			}
+			if (index - lineStart > MAX_RPC_LINE_LENGTH) {
 				this.failProtocol(new Error(`pi rpc line exceeds ${MAX_RPC_LINE_LENGTH} characters`));
 				return;
 			}
-			const line = this.buffer.slice(0, index).replace(/\r$/, "");
-			this.buffer = this.buffer.slice(index + 1);
+			const line = this.buffer.slice(lineStart, index).replace(/\r$/, "");
+			lineStart = index + 1;
+			this.scanFrom = lineStart;
 			if (line.trim()) this.handleLine(line);
 		}
 	}
@@ -168,6 +199,7 @@ export class PiRpcClient extends EventEmitter {
 
 	private failProtocol(error: Error): void {
 		this.buffer = "";
+		this.scanFrom = 0;
 		this.rejectAll(error);
 		this.emit("error", error);
 		this.child?.kill();

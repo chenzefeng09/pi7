@@ -28,83 +28,104 @@ interface SessionListItem {
 	updatedAt: string;
 }
 
-function listSessionFiles(agentDir: string): SessionListItem[] {
+/**
+ * Session list entries by file path, keyed on the file's mtime and size. A listing is asked for
+ * after every new session, rename, fork and settled turn; without this every one of them re-read
+ * and re-parsed the 50 newest transcripts, which can be tens of MB each once images are involved.
+ */
+const sessionListCache = new Map<string, { item: SessionListItem; mtimeMs: number; size: number }>();
+
+/** Only these entry types feed the list; every other line (tool output, images) is skipped unparsed. */
+const SESSION_LIST_LINE = /"type":"(?:session|session_info|message)"/;
+
+async function readSessionListItem(file: { mtime: number; path: string; size: number }): Promise<SessionListItem> {
+	const cached = sessionListCache.get(file.path);
+	if (cached && cached.mtimeMs === file.mtime && cached.size === file.size) return cached.item;
+	let cwd: string | undefined;
+	let firstMessage: string | undefined;
+	let id = path.basename(file.path, ".jsonl");
+	let name: string | undefined;
+	try {
+		for (const line of (await fs.promises.readFile(file.path, "utf8")).split("\n")) {
+			if (!SESSION_LIST_LINE.test(line)) continue;
+			let entry: Record<string, unknown>;
+			try {
+				entry = JSON.parse(line) as Record<string, unknown>;
+			} catch {
+				continue;
+			}
+			if (entry.type === "session") {
+				if (typeof entry.id === "string") id = entry.id;
+				if (typeof entry.cwd === "string") cwd = entry.cwd;
+			}
+			if (entry.type === "session_info" && typeof entry.name === "string") {
+				name = entry.name;
+			}
+			if (!firstMessage && entry.type === "message") {
+				const message = entry.message as Record<string, unknown> | undefined;
+				if (message?.role === "user") {
+					const content = message.content;
+					const text =
+						typeof content === "string"
+							? content
+							: Array.isArray(content)
+								? content
+										.map((part) =>
+											typeof part === "object" && part !== null && typeof (part as { text?: unknown }).text === "string"
+												? (part as { text: string }).text
+												: "",
+										)
+										.join("")
+								: "";
+					if (text.trim()) firstMessage = text.trim().slice(0, 120);
+				}
+			}
+		}
+	} catch {}
+	const item: SessionListItem = {
+		cwd,
+		firstMessage,
+		id,
+		name,
+		path: file.path,
+		updatedAt: new Date(file.mtime).toISOString(),
+	};
+	sessionListCache.set(file.path, { item, mtimeMs: file.mtime, size: file.size });
+	return item;
+}
+
+async function listSessionFiles(agentDir: string): Promise<SessionListItem[]> {
 	const sessionsDir = path.join(agentDir, "sessions");
 	if (!fs.existsSync(sessionsDir)) return [];
-	const files: { mtime: number; path: string }[] = [];
-	const walk = (dir: string): void => {
+	const files: { mtime: number; path: string; size: number }[] = [];
+	const walk = async (dir: string): Promise<void> => {
 		let entries: fs.Dirent[];
 		try {
-			entries = fs.readdirSync(dir, { withFileTypes: true });
+			entries = await fs.promises.readdir(dir, { withFileTypes: true });
 		} catch {
 			return;
 		}
 		for (const entry of entries) {
 			const fullPath = path.join(dir, entry.name);
 			if (entry.isDirectory()) {
-				walk(fullPath);
+				await walk(fullPath);
 			} else if (entry.isFile() && entry.name.endsWith(".jsonl")) {
 				try {
-					files.push({ mtime: fs.statSync(fullPath).mtimeMs, path: fullPath });
+					const stat = await fs.promises.stat(fullPath);
+					files.push({ mtime: stat.mtimeMs, path: fullPath, size: stat.size });
 				} catch {
 					// A session can be rotated or archived while the sidebar is reading it.
 				}
 			}
 		}
-		};
-	walk(sessionsDir);
+	};
+	await walk(sessionsDir);
 	files.sort((left, right) => right.mtime - left.mtime);
-	return files.slice(0, 50).map((file) => {
-		let cwd: string | undefined;
-		let firstMessage: string | undefined;
-		let id = path.basename(file.path, ".jsonl");
-		let name: string | undefined;
-		try {
-			for (const line of fs.readFileSync(file.path, "utf8").split("\n")) {
-				if (!line.trim()) continue;
-				let entry: Record<string, unknown>;
-				try {
-					entry = JSON.parse(line) as Record<string, unknown>;
-				} catch {
-					continue;
-				}
-				if (entry.type === "session") {
-					if (typeof entry.id === "string") id = entry.id;
-					if (typeof entry.cwd === "string") cwd = entry.cwd;
-				}
-				if (entry.type === "session_info" && typeof entry.name === "string") {
-					name = entry.name;
-				}
-				if (!firstMessage && entry.type === "message") {
-					const message = entry.message as Record<string, unknown> | undefined;
-					if (message?.role === "user") {
-						const content = message.content;
-						const text =
-							typeof content === "string"
-								? content
-								: Array.isArray(content)
-									? content
-											.map((part) =>
-												typeof part === "object" && part !== null && typeof (part as { text?: unknown }).text === "string"
-													? (part as { text: string }).text
-													: "",
-											)
-											.join("")
-									: "";
-						if (text.trim()) firstMessage = text.trim().slice(0, 120);
-					}
-				}
-			}
-		} catch {}
-		return {
-			cwd,
-			firstMessage,
-			id,
-			name,
-			path: file.path,
-			updatedAt: new Date(file.mtime).toISOString(),
-		};
-	});
+	const newest = files.slice(0, 50);
+	// Entries for files that fell out of the newest 50 (or were archived) are not worth keeping.
+	const keep = new Set(newest.map((file) => file.path));
+	for (const key of sessionListCache.keys()) if (!keep.has(key)) sessionListCache.delete(key);
+	return Promise.all(newest.map((file) => readSessionListItem(file)));
 }
 
 const IGNORED_FILE_DIRS = new Set([
@@ -120,13 +141,15 @@ const IGNORED_FILE_DIRS = new Set([
 ]);
 const MAX_FILE_READ_BYTES = 64 * 1024 * 1024;
 
-function listWorkspaceFiles(root: string, limit = 5000): string[] {
+// Async: a 5000-file walk of a large checkout on a slow disk must not stall the main process,
+// which is also what relays every pi event to the window.
+async function listWorkspaceFiles(root: string, limit = 5000): Promise<string[]> {
 	const files: string[] = [];
-	const walk = (dir: string): void => {
+	const walk = async (dir: string): Promise<void> => {
 		if (files.length >= limit) return;
 		let entries: fs.Dirent[];
 		try {
-			entries = fs.readdirSync(dir, { withFileTypes: true });
+			entries = await fs.promises.readdir(dir, { withFileTypes: true });
 		} catch {
 			return;
 		}
@@ -134,14 +157,14 @@ function listWorkspaceFiles(root: string, limit = 5000): string[] {
 		for (const entry of entries) {
 			if (files.length >= limit) return;
 			if (entry.isDirectory()) {
-				if (!IGNORED_FILE_DIRS.has(entry.name)) walk(path.join(dir, entry.name));
+				if (!IGNORED_FILE_DIRS.has(entry.name)) await walk(path.join(dir, entry.name));
 				continue;
 			}
 			if (!entry.isFile()) continue;
 			files.push(path.relative(root, path.join(dir, entry.name)).replace(/\\/g, "/"));
 		}
 	};
-	walk(root);
+	await walk(root);
 	return files;
 }
 
@@ -244,7 +267,7 @@ function ensureClient(): PiRpcClient {
 		// broadcasts before replacing it so that a late exit/error cannot mark the newly started
 		// client as disconnected.
 		client.removeAllListeners();
-		client.stop();
+		void client.stop();
 	}
 	const config = resolvePiWin7Config({
 		isPackaged: app.isPackaged,
@@ -327,46 +350,55 @@ function createWindow(): void {
 	});
 }
 
+/**
+ * Forward one command to pi and hand the renderer pi's own response envelope.
+ *
+ * `PiRpcClient.send` rejects on `success: false`; letting that rejection cross `ipcMain.handle`
+ * turns it into `Error invoking remote method 'pi:command': Error: <message>`, which is what the
+ * user would then read in a notification. The renderer's `rpc()` checks `success === false`
+ * instead, so a failed command is returned as data rather than thrown.
+ */
+async function forwardCommand(command: PiRpcCommand): Promise<unknown> {
+	try {
+		return await ensureClient().send(command);
+	} catch (error) {
+		return {
+			command: command.type,
+			error: error instanceof Error ? error.message : String(error),
+			id: command.id,
+			success: false,
+			type: "response",
+		};
+	}
+}
+
+async function stopClient(): Promise<void> {
+	const current = client;
+	client = undefined;
+	if (current) await current.stop();
+}
+
 ipcMain.handle("pi:start", () => {
 	ensureClient();
 	return { ok: true };
 });
 
-ipcMain.handle("pi:stop", () => {
-	client?.stop();
-	client = undefined;
+ipcMain.handle("pi:stop", async () => {
+	await stopClient();
 	return { ok: true };
 });
 
-ipcMain.handle("pi:prompt", async (_event, text: string) => {
-	const response = await ensureClient().send({ message: text, type: "prompt" });
-	return response;
-});
+ipcMain.handle("pi:prompt", (_event, text: string) => forwardCommand({ message: text, type: "prompt" }));
 
-ipcMain.handle("pi:command", async (_event, command: PiRpcCommand) => {
-	const response = await ensureClient().send(command);
-	return response;
-});
+ipcMain.handle("pi:command", (_event, command: PiRpcCommand) => forwardCommand(command));
 
-ipcMain.handle("pi:abort", async () => {
-	const response = await ensureClient().send({ type: "abort" });
-	return response;
-});
+ipcMain.handle("pi:abort", () => forwardCommand({ type: "abort" }));
 
-ipcMain.handle("pi:get-state", async () => {
-	const response = await ensureClient().send({ type: "get_state" });
-	return response;
-});
+ipcMain.handle("pi:get-state", () => forwardCommand({ type: "get_state" }));
 
-ipcMain.handle("pi:get-messages", async () => {
-	const response = await ensureClient().send({ type: "get_messages" });
-	return response;
-});
+ipcMain.handle("pi:get-messages", () => forwardCommand({ type: "get_messages" }));
 
-ipcMain.handle("pi:new-session", async () => {
-	const response = await ensureClient().send({ type: "new_session" });
-	return response;
-});
+ipcMain.handle("pi:new-session", () => forwardCommand({ type: "new_session" }));
 
 ipcMain.handle("pi:list-sessions", () => {
 	const config = resolvePiWin7Config({
@@ -376,30 +408,23 @@ ipcMain.handle("pi:list-sessions", () => {
 	return listSessionFiles(config.agentDir);
 });
 
-ipcMain.handle("pi:switch-session", async (_event, sessionPath: string) => {
-	const response = await ensureClient().send({ sessionPath, type: "switch_session" });
-	return response;
-});
+ipcMain.handle("pi:switch-session", (_event, sessionPath: string) =>
+	forwardCommand({ sessionPath, type: "switch_session" }),
+);
 
-ipcMain.handle("pi:get-available-models", async () => {
-	const response = await ensureClient().send({ type: "get_available_models" });
-	return response;
-});
+ipcMain.handle("pi:get-available-models", () => forwardCommand({ type: "get_available_models" }));
 
-ipcMain.handle("pi:get-available-thinking-levels", async () => {
-	const response = await ensureClient().send({ type: "get_available_thinking_levels" });
-	return response;
-});
+ipcMain.handle("pi:get-available-thinking-levels", () =>
+	forwardCommand({ type: "get_available_thinking_levels" }),
+);
 
-ipcMain.handle("pi:set-model", async (_event, provider: string, modelId: string) => {
-	const response = await ensureClient().send({ modelId, provider, type: "set_model" });
-	return response;
-});
+ipcMain.handle("pi:set-model", (_event, provider: string, modelId: string) =>
+	forwardCommand({ modelId, provider, type: "set_model" }),
+);
 
-ipcMain.handle("pi:set-thinking-level", async (_event, level: string) => {
-	const response = await ensureClient().send({ level, type: "set_thinking_level" });
-	return response;
-});
+ipcMain.handle("pi:set-thinking-level", (_event, level: string) =>
+	forwardCommand({ level, type: "set_thinking_level" }),
+);
 
 ipcMain.handle("pi:extension-ui-response", (_event, response: unknown) => {
 	debugLog("extension-ui-response", response);
@@ -407,18 +432,16 @@ ipcMain.handle("pi:extension-ui-response", (_event, response: unknown) => {
 	return { ok: true };
 });
 
-ipcMain.handle("pi:restart", () => {
-	client?.stop();
-	client = undefined;
+ipcMain.handle("pi:restart", async () => {
+	await stopClient();
 	ensureClient();
 	return { ok: true };
 });
 
-ipcMain.handle("pi:set-workspace-cwd", (_event, cwd: string) => {
+ipcMain.handle("pi:set-workspace-cwd", async (_event, cwd: string) => {
 	if (typeof cwd !== "string" || !cwd.trim()) return { cwd: process.env.PI_WORKSPACE_CWD };
 	process.env.PI_WORKSPACE_CWD = cwd;
-	client?.stop();
-	client = undefined;
+	await stopClient();
 	ensureClient();
 	return { cwd };
 });
@@ -616,7 +639,7 @@ ipcMain.handle("pi:get-runtime-info", (): PiRuntimeInfo => {
 	};
 });
 
-ipcMain.handle("pi:list-files", (_event, root?: string) => {
+ipcMain.handle("pi:list-files", async (_event, root?: string) => {
 	const config = resolvePiWin7Config({
 		isPackaged: app.isPackaged,
 		resourcesPath: process.resourcesPath,
@@ -627,7 +650,7 @@ ipcMain.handle("pi:list-files", (_event, root?: string) => {
 	const target = requested && fs.existsSync(requested) ? requested : config.cwd;
 	// The root travels back with the listing: the panel resolves preview paths against it, and a
 	// session whose handle folder differs from its own recorded cwd must not guess.
-	return { files: listWorkspaceFiles(target), root: target };
+	return { files: await listWorkspaceFiles(target), root: target };
 });
 
 ipcMain.handle("pi:read-file", async (_event, filePath: string) => {
@@ -854,9 +877,14 @@ void app.whenReady().then(() => {
 	});
 });
 
-app.on("before-quit", () => {
-	client?.stop();
-	client = undefined;
+let quitting = false;
+app.on("before-quit", (event) => {
+	// Hold the quit once so pi can run its shutdown hooks (bounded by STOP_GRACE_MS in the
+	// client); the second pass, after the stop settled, lets the app go.
+	if (quitting || !client) return;
+	quitting = true;
+	event.preventDefault();
+	void stopClient().finally(() => app.quit());
 });
 
 app.on("window-all-closed", () => {
