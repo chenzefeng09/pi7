@@ -6,7 +6,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { performance } from "node:perf_hooks";
 import { isKeyRelease, matchesKey } from "./keys.ts";
-import type { Terminal } from "./terminal.ts";
+import { isLegacyWindowsConsole, type Terminal } from "./terminal.ts";
 import {
 	isOsc11BackgroundColorResponse,
 	parseOsc11BackgroundColor,
@@ -340,7 +340,17 @@ export abstract class TuiBase extends Container implements TUI {
 	private immediateRenderScheduled = false;
 	private renderTimer: NodeJS.Timeout | undefined;
 	private lastRenderAt = 0;
-	private static readonly MIN_RENDER_INTERVAL_MS = 16;
+	// Minimum interval between differential renders. Terminals without
+	// synchronized-output support (DECSET 2026) show every repaint, so streaming
+	// content above the editor makes its border lines visibly flicker at 60fps.
+	// ConEmu and any other Windows 7 terminal (winpty screen-scraping, e.g. VS
+	// Code) are the known cases — throttle harder there. Override with
+	// PI_TUI_MIN_RENDER_MS.
+	private static readonly MIN_RENDER_INTERVAL_MS = (() => {
+		const override = Number(process.env.PI_TUI_MIN_RENDER_MS);
+		if (Number.isFinite(override) && override >= 0) return override;
+		return process.env.ConEmuANSI === "ON" || isLegacyWindowsConsole() ? 100 : 16;
+	})();
 	private showHardwareCursor = process.env.PI_HARDWARE_CURSOR === "1";
 	private clearOnShrink = process.env.PI_CLEAR_ON_SHRINK === "1";
 	protected fullRedrawCount = 0;

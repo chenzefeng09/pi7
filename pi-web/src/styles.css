@@ -1,0 +1,578 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+	height: 100%;
+	margin: 0;
+}
+
+/* The palette. Light is the default set; `[data-theme="dark"]` below swaps every value, and the
+   components only ever name tokens, never a literal colour. */
+:root {
+	--pi-accent: #3a83f7;
+	--pi-canvas: #fcfcfc;
+	--pi-code: #f9fafb;
+	--pi-danger: #ec1313;
+	--pi-ink: #0d0d0d;
+	--pi-ink-caption: #adb2b8;
+	--pi-ink-faint: #8f8f8f;
+	--pi-ink-muted: #5d5d5d;
+	--pi-ink-subtle: #81858c;
+	--pi-line: #0000001a;
+	--pi-line-strong: #00000026;
+	--pi-success: #22c55e;
+	--pi-surface: #ffffff;
+	--pi-surface-hover: #00000012;
+	--pi-surface-muted: #f3f3f3;
+	--pi-user-bubble: #e8f3fe;
+	--pi-warn: #f59e0b;
+	/* Surfaces the app writes as literals rather than tokens, kept here so the dark block can
+	   restate them in one place. */
+	/* The window's own backdrop: a soft gradient the panels float on. It is a variable because a
+	   literal gradient in the markup is exactly what kept the sidebar and the top bar light while
+	   the cards had already gone dark. */
+	--pi-app-gradient: linear-gradient(155deg, #edf2f5 0%, #e9f1e9 50%, #e3eee1 100%);
+	--pi-float: #ffffff;
+	--pi-inverse: #1f2937;
+	--pi-scrim: rgb(0 0 0 / 0.2);
+	color-scheme: light;
+}
+
+[data-theme="dark"] {
+	--pi-accent: #5b9bff;
+	--pi-canvas: #131417;
+	--pi-code: #1b1d21;
+	--pi-danger: #ff6b6b;
+	--pi-ink: #f2f3f5;
+	--pi-ink-caption: #7d838c;
+	--pi-ink-faint: #9aa0a8;
+	--pi-ink-muted: #b3b8bf;
+	--pi-ink-subtle: #9aa0a8;
+	--pi-line: #ffffff1f;
+	--pi-line-strong: #ffffff33;
+	--pi-success: #4ade80;
+	--pi-surface: #1c1e22;
+	--pi-surface-hover: #ffffff14;
+	--pi-surface-muted: #232529;
+	--pi-user-bubble: #1e3a5f;
+	--pi-warn: #fbbf24;
+	--pi-app-gradient: linear-gradient(155deg, #16181c 0%, #14171a 50%, #131619 100%);
+	--pi-float: #232529;
+	--pi-inverse: #e5e7eb;
+	--pi-scrim: rgb(0 0 0 / 0.5);
+	color-scheme: dark;
+}
+
+body {
+	background: var(--pi-canvas);
+	color: var(--pi-ink);
+	font-family: ui-sans-serif, -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+
+/* The appearance setting scales type only: every px size the components name is restated as the
+   same size times `--pi-font-scale`, so rows, paddings and icons keep their geometry while text
+   grows. These rules sit after `@tailwind utilities`, which is what lets them win at equal
+   specificity. Line boxes that were pinned to a px value scale with the text they hold. */
+[class~="text-[10px]"] { font-size: calc(10px * var(--pi-font-scale, 1)); }
+[class~="text-[11px]"] { font-size: calc(11px * var(--pi-font-scale, 1)); }
+[class~="text-[12px]"] { font-size: calc(12px * var(--pi-font-scale, 1)); }
+[class~="text-[13px]"] { font-size: calc(13px * var(--pi-font-scale, 1)); }
+[class~="text-[14px]"] { font-size: calc(14px * var(--pi-font-scale, 1)); }
+[class~="text-[15px]"] { font-size: calc(15px * var(--pi-font-scale, 1)); }
+[class~="text-[16px]"] { font-size: calc(16px * var(--pi-font-scale, 1)); }
+[class~="text-[17px]"] { font-size: calc(17px * var(--pi-font-scale, 1)); }
+[class~="text-[18px]"] { font-size: calc(18px * var(--pi-font-scale, 1)); }
+[class~="text-[20px]"] { font-size: calc(20px * var(--pi-font-scale, 1)); }
+[class~="text-[24px]"] { font-size: calc(24px * var(--pi-font-scale, 1)); }
+[class~="text-[26px]"] { font-size: calc(26px * var(--pi-font-scale, 1)); }
+[class~="leading-[18px]"] { line-height: calc(18px * var(--pi-font-scale, 1)); }
+[class~="leading-[19px]"] { line-height: calc(19px * var(--pi-font-scale, 1)); }
+[class~="leading-[22px]"] { line-height: calc(22px * var(--pi-font-scale, 1)); }
+
+/* Dark-mode remaps for the two families the tokens cannot reach: literal ink colours written into
+   class names, and the black/N washes that have to become white/N on a dark surface.
+
+   Every selector matches a whole class token (`~=`) rather than a substring: `[class*="bg-black/"]`
+   also matches `hover:bg-black/[0.015]`, which is how the suggestion cards ended up painted with a
+   wash instead of their own surface. */
+[data-theme="dark"] .bg-white {
+	background-color: var(--pi-surface);
+}
+
+[data-theme="dark"] [class~="bg-black"],
+[data-theme="dark"] [class~="bg-black/[0.04]"],
+[data-theme="dark"] [class~="bg-black/[0.05]"],
+[data-theme="dark"] [class~="bg-black/[0.06]"],
+[data-theme="dark"] [class~="bg-black/[0.07]"],
+[data-theme="dark"] [class~="bg-black/[0.08]"],
+[data-theme="dark"] [class~="bg-black/[0.12]"] {
+	background-color: rgb(255 255 255 / 0.07);
+}
+
+[data-theme="dark"] [class~="hover:bg-black/[0.04]"]:hover,
+[data-theme="dark"] [class~="hover:bg-black/[0.05]"]:hover,
+[data-theme="dark"] [class~="hover:bg-black/[0.06]"]:hover,
+[data-theme="dark"] [class~="hover:bg-black/[0.08]"]:hover {
+	background-color: rgb(255 255 255 / 0.09);
+}
+
+[data-theme="dark"] [class~="border-black/[0.06]"],
+[data-theme="dark"] [class~="border-black/[0.08]"],
+[data-theme="dark"] [class~="border-black/[0.1]"],
+[data-theme="dark"] [class~="border-black/[0.12]"] {
+	border-color: rgb(255 255 255 / 0.12);
+}
+
+[data-theme="dark"] [class~="text-[#1f2937]"],
+[data-theme="dark"] [class~="text-[#111827]"],
+[data-theme="dark"] [class~="text-[#0d0d0d]"],
+[data-theme="dark"] [class~="text-[#1f2328]"],
+[data-theme="dark"] [class~="text-[#344054]"] {
+	color: #eceef1;
+}
+
+/* The app also draws its chrome in a desaturated green-black (#3f4a43 and friends) that is far
+   darker than the greys around it; unmapped, those read at 2:1 on a dark surface. */
+[data-theme="dark"] [class~="text-[#374151]"],
+[data-theme="dark"] [class~="text-[#3f4a43]"],
+[data-theme="dark"] [class~="text-[#4b5563]"],
+[data-theme="dark"] [class~="text-[#475467]"] {
+	color: #d3d7dc;
+}
+
+[data-theme="dark"] [class~="text-[#667085]"],
+[data-theme="dark"] [class~="text-[#5d5d5d]"],
+[data-theme="dark"] [class~="text-[#6b7280]"],
+[data-theme="dark"] [class~="text-[#6f7a72]"],
+[data-theme="dark"] [class~="text-[#7d8780]"],
+[data-theme="dark"] [class~="text-[#7f8b83]"] {
+	color: #b4bac2;
+}
+
+[data-theme="dark"] [class~="text-[#98a2b3]"],
+[data-theme="dark"] [class~="text-[#8b95a1]"],
+[data-theme="dark"] [class~="text-[#8a938c]"],
+[data-theme="dark"] [class~="text-[#9aa3ad]"],
+[data-theme="dark"] [class~="text-[#8f8f8f]"],
+[data-theme="dark"] [class~="text-[#7f9d88]"] {
+	color: #9aa1ab;
+}
+
+[data-theme="dark"] [class~="text-[#b6bcc4]"],
+[data-theme="dark"] [class~="text-[#c0c6cd]"],
+[data-theme="dark"] [class~="text-[#adb2b8]"],
+[data-theme="dark"] [class~="text-[#c7ccd2]"],
+[data-theme="dark"] [class~="text-[#cdd3da]"] {
+	color: #7c838c;
+}
+
+/* Status colours keep their meaning, raised to a legible lightness. */
+[data-theme="dark"] [class~="text-[#16a34a]"],
+[data-theme="dark"] [class~="text-[#22c55e]"] {
+	color: #4ade80;
+}
+
+[data-theme="dark"] [class~="text-[#b42318]"],
+[data-theme="dark"] [class~="text-[#d92d20]"],
+[data-theme="dark"] [class~="text-[#f04438]"] {
+	color: #ff8a80;
+}
+
+[data-theme="dark"] [class~="text-[#b54708]"],
+[data-theme="dark"] [class~="text-[#f79009]"],
+[data-theme="dark"] [class~="text-[#f97316]"] {
+	color: #fbbf24;
+}
+
+[data-theme="dark"] [class~="text-[#2f7df6]"] {
+	color: #7db0ff;
+}
+
+[data-theme="dark"] [class~="text-[#8b5cf6]"] {
+	color: #b39dff;
+}
+
+[data-theme="dark"] [class~="bg-[#f7f7f8]"],
+[data-theme="dark"] [class~="bg-[#f5f6f7]"],
+[data-theme="dark"] [class~="bg-[#f3f3f3]"],
+[data-theme="dark"] [class~="bg-[#fafafa]"],
+[data-theme="dark"] [class~="bg-[#f9fafb]"],
+[data-theme="dark"] [class~="bg-[#f4f4f5]"],
+[data-theme="dark"] [class~="bg-[#fafbfa]"],
+[data-theme="dark"] [class~="bg-[#f7f8f7]"] {
+	background-color: var(--pi-surface-muted);
+}
+
+/* Tinted notice surfaces keep their hue, at a dark-mode lightness. */
+[data-theme="dark"] [class~="bg-[#edf3fe]"] {
+	background-color: #1b2a44;
+}
+
+[data-theme="dark"] [class~="bg-[#fef3f2]"],
+[data-theme="dark"] [class~="bg-[#fff5f5]"] {
+	background-color: #3a2020;
+}
+
+[data-theme="dark"] [class~="bg-[#fffaf0]"] {
+	background-color: #3a2f1c;
+}
+
+[data-theme="dark"] [class~="bg-[#ebeef2]"],
+[data-theme="dark"] [class~="bg-[#eef1f4]"] {
+	background-color: #2b2e33;
+}
+
+@keyframes popup-in {
+	from {
+		opacity: 0;
+		transform: translateY(4px) scale(0.985);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes popup-out {
+	from {
+		opacity: 1;
+		transform: none;
+	}
+	to {
+		opacity: 0;
+		transform: translateY(4px) scale(0.985);
+	}
+}
+
+.popup-fade,
+.popup-enter {
+	animation: popup-in 140ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.popup-exit {
+	animation: popup-out 140ms cubic-bezier(0.4, 0, 1, 1) forwards;
+	pointer-events: none;
+}
+
+@keyframes overlay-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes overlay-out {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
+	}
+}
+
+/* Keyframes rather than transitions: a transition needs a second paint before the state flips,
+   which a throttled renderer (minimized window) may never schedule, leaving the dialog hidden. */
+.popover-overlay-enter {
+	animation: overlay-in 150ms ease-out;
+}
+
+.popover-overlay-exit {
+	animation: overlay-out 150ms ease-out forwards;
+	pointer-events: none;
+}
+
+@keyframes modal-in {
+	from {
+		opacity: 0;
+		transform: translateY(-8px) scale(0.96);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes modal-out {
+	from {
+		opacity: 1;
+		transform: none;
+	}
+	to {
+		opacity: 0;
+		transform: translateY(-8px) scale(0.96);
+	}
+}
+
+.modal-overlay-enter {
+	animation: overlay-in 200ms ease-out;
+}
+
+.modal-overlay-exit {
+	animation: overlay-out 200ms ease-out forwards;
+	pointer-events: none;
+}
+
+.modal-panel-enter {
+	animation: modal-in 200ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.modal-panel-exit {
+	animation: modal-out 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+	pointer-events: none;
+}
+
+/* Chromium in Electron also paints :focus-visible for mouse clicks, which shows a ring
+   on every clicked button. Track the input modality so only keyboard users get one. */
+button:focus {
+	outline: none;
+}
+
+html[data-input="keyboard"] button:focus-visible {
+	outline: 2px solid rgba(47, 125, 246, 0.45);
+	outline-offset: 1px;
+}
+
+/* Sidebar drag insert marker: a chevron and a 2px rule sitting exactly on the boundary the dragged
+   row would land on. Absolutely positioned and pointer-transparent, so it neither moves the rows
+   apart nor steals the drag from the row underneath it. `.pi-drop-before` marks the row's top edge,
+   `.pi-drop-after` its bottom edge. */
+.pi-drop-before,
+.pi-drop-after {
+	position: relative;
+}
+
+.pi-drop-before::before,
+.pi-drop-after::after {
+	content: "";
+	position: absolute;
+	z-index: 1;
+	left: 0;
+	right: 4px;
+	height: 12px;
+	background:
+		linear-gradient(
+				55deg,
+				transparent calc(50% - 1px),
+				var(--pi-accent) calc(50% - 1px) calc(50% + 1px),
+				transparent calc(50% + 1px)
+			)
+			0 0 / 5px 7px no-repeat,
+		linear-gradient(
+				125deg,
+				transparent calc(50% - 1px),
+				var(--pi-accent) calc(50% - 1px) calc(50% + 1px),
+				transparent calc(50% + 1px)
+			)
+			0 5px / 5px 7px no-repeat,
+		linear-gradient(var(--pi-accent) 0 0) 4px 5px / calc(100% - 4px) 2px no-repeat;
+	pointer-events: none;
+}
+
+.pi-drop-before::before {
+	top: -6px;
+}
+
+.pi-drop-after::after {
+	bottom: -6px;
+}
+
+.scrollbar-subtle {
+	scrollbar-color: rgba(104, 116, 108, 0.28) transparent;
+	scrollbar-width: thin;
+}
+
+.scrollbar-subtle::-webkit-scrollbar {
+	height: 8px;
+	width: 8px;
+}
+
+.scrollbar-subtle::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.scrollbar-subtle::-webkit-scrollbar-thumb {
+	background-color: rgba(104, 116, 108, 0.24);
+	background-clip: padding-box;
+	border: 2px solid transparent;
+	border-radius: 999px;
+}
+
+.scrollbar-subtle::-webkit-scrollbar-thumb:hover {
+	background-color: rgba(104, 116, 108, 0.38);
+}
+
+.scrollbar-subtle::-webkit-scrollbar-button {
+	display: none;
+	height: 0;
+	width: 0;
+}
+
+.scrollbar-subtle::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
+.prose-pi {
+	color: #1f2328;
+	font-size: 14px;
+	line-height: 22px;
+}
+
+.prose-pi p {
+	margin: 0 0 10px;
+}
+
+.prose-pi p:last-child {
+	margin-bottom: 0;
+}
+
+.prose-pi ul,
+.prose-pi ol {
+	margin: 0 0 10px;
+	padding-left: 22px;
+}
+
+.prose-pi li {
+	margin: 2px 0;
+}
+
+.prose-pi a {
+	color: #2563eb;
+	text-decoration: underline;
+}
+
+.prose-pi blockquote {
+	border-left: 3px solid #e5e7eb;
+	color: #667085;
+	margin: 0 0 12px;
+	padding-left: 12px;
+}
+
+.prose-pi table {
+	border-collapse: collapse;
+	margin: 0 0 12px;
+	width: 100%;
+}
+
+.prose-pi th,
+.prose-pi td {
+	border: 1px solid #e5e7eb;
+	padding: 6px 8px;
+	text-align: left;
+}
+
+.codex-range {
+	appearance: none;
+	background: transparent;
+	cursor: pointer;
+	height: 20px;
+}
+
+.codex-range::-webkit-slider-runnable-track {
+	background: #e5e7eb;
+	border-radius: 999px;
+	height: 6px;
+}
+
+.codex-range::-webkit-slider-thumb {
+	appearance: none;
+	background: #2f7df6;
+	border: 3px solid #ffffff;
+	border-radius: 999px;
+	box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+	height: 20px;
+	margin-top: -7px;
+	width: 20px;
+}
+
+.codex-range::-moz-range-track {
+	background: #e5e7eb;
+	border-radius: 999px;
+	height: 6px;
+}
+
+.codex-range::-moz-range-thumb {
+	background: #2f7df6;
+	border: 3px solid #ffffff;
+	border-radius: 999px;
+	box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+	height: 14px;
+	width: 14px;
+}
+
+.codex-range:disabled {
+	opacity: 0.5;
+}
+
+/* Running flow row: a fixed-width glare band glides across the 24px line, washing the icon and
+   the summary toward the background. Mirrors the dsh tool/think row sweep. */
+.row-sweep {
+	animation: row-sweep 2.6s ease-out infinite;
+	background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.75) 55%, transparent 100%);
+	bottom: 0;
+	left: 0;
+	pointer-events: none;
+	position: absolute;
+	top: 0;
+	width: 300px;
+}
+
+@keyframes row-sweep {
+	0% {
+		left: -300px;
+	}
+	90%,
+	100% {
+		left: 100%;
+	}
+}
+
+/* Streaming turn status: the dsh turn-status line, a brand-blue shimmer that keeps one line of
+   footprint while the model works. */
+.turn-status {
+	align-self: flex-start;
+	animation: turn-status-shimmer 1.8s linear infinite;
+	background: linear-gradient(
+		90deg,
+		#3a83f7 0%,
+		#3a83f7 40%,
+		#cfe0ff 50%,
+		#3a83f7 60%,
+		#3a83f7 100%
+	);
+	background-clip: text;
+	background-position: 100% 0;
+	background-size: 250% 100%;
+	color: transparent;
+	font-size: 14px;
+	height: 26px;
+	line-height: 22px;
+	margin-top: 16px;
+	white-space: nowrap;
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+}
+
+@keyframes turn-status-shimmer {
+	to {
+		background-position: 0 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.row-sweep {
+		animation: none;
+		opacity: 0;
+	}
+
+	.turn-status {
+		animation: none;
+		background-position: 0 0;
+		background-size: 100% 100%;
+	}
+}

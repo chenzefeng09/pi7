@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import { createRequire } from "node:module";
+import * as os from "node:os";
 import * as path from "node:path";
 import { setKittyProtocolActive } from "./keys.ts";
 import { isNativeModifierPressed } from "./native-modifiers.ts";
@@ -39,6 +40,46 @@ function isKeyboardProtocolNegotiationSequencePrefix(sequence: string): boolean 
 
 export function isAppleTerminalSession(): boolean {
 	return process.platform === "darwin" && process.env.TERM_PROGRAM === "Apple_Terminal";
+}
+
+/**
+ * Windows 7 (NT 6.1) and earlier has no ConPTY (that needs the ConDrv driver,
+ * introduced in Windows 8) and its console never interprets VT/ANSI escapes on
+ * its own. Every terminal there is one of: ConEmu (its own in-process VT
+ * engine, hooking WriteConsole) or something falling back to winpty (which
+ * spawns a hidden console and periodically screen-scrapes + re-encodes it,
+ * e.g. VS Code's integrated terminal via node-pty). Both paths share the same
+ * rendering ceiling: no synchronized-output (DECSET 2026), no reliable
+ * 24-bit/256 color, immediate cursor wrap. Detect this by OS version rather
+ * than by terminal name, so the degraded-but-correct render path applies
+ * regardless of which terminal is used — not just ConEmu specifically.
+ */
+export function isLegacyWindowsConsole(): boolean {
+	if (process.platform !== "win32") return false;
+	const [majorStr, minorStr] = os.release().split(".");
+	const major = Number(majorStr);
+	if (!Number.isFinite(major)) return false;
+	if (major < 6) return true;
+	return major === 6 && Number(minorStr) <= 1;
+}
+
+function isConEmuOrLegacyWindows(): boolean {
+	return process.env.ConEmuANSI === "ON" || isLegacyWindowsConsole();
+}
+
+/**
+ * Some terminals (notably ConEmu, the practical choice on Windows 7) wrap the
+ * cursor immediately when the last column is written instead of deferring the
+ * wrap like xterm/VT terminals. Full-width rows then consume an extra line each,
+ * which breaks the differential renderer's cursor math (duplicated frames, large
+ * gaps). Render one column narrower there so the last column is never written.
+ * Override with PI_TUI_SAFE_WIDTH=1 (force on) or PI_TUI_SAFE_WIDTH=0 (force off).
+ */
+function safeWidthInset(): number {
+	const override = process.env.PI_TUI_SAFE_WIDTH;
+	if (override === "0") return 0;
+	if (override === "1") return 1;
+	return isConEmuOrLegacyWindows() ? 1 : 0;
 }
 
 export function normalizeNativeShiftEnterInput(
@@ -485,7 +526,8 @@ export class ProcessTerminal implements Terminal {
 	}
 
 	get columns(): number {
-		return process.stdout.columns || Number(process.env.COLUMNS) || 80;
+		const raw = process.stdout.columns || Number(process.env.COLUMNS) || 80;
+		return Math.max(20, raw - safeWidthInset());
 	}
 
 	get rows(): number {

@@ -36,16 +36,30 @@ function couldBeEmoji(segment: string): boolean {
 	);
 }
 
-// Regexes for character classification (same as string-width library)
-const zeroWidthRegex = /^(?:\p{Default_Ignorable_Code_Point}|\p{Control}|\p{Mark}|\p{Surrogate})+$/v;
-const leadingNonPrintingRegex = /^[\p{Default_Ignorable_Code_Point}\p{Control}\p{Format}\p{Mark}\p{Surrogate}]+/v;
-const nonPrintingCharRegex = /^(?:\p{Default_Ignorable_Code_Point}|\p{Control}|\p{Format}|\p{Mark}|\p{Surrogate})$/v;
-const markCharRegex = /^\p{Mark}$/v;
-// Marks that terminals allocate cells for when attached to a base character.
-// This includes Unicode spacing marks and non-spacing exceptions in legacy wcwidth tables.
+// Regexes for character classification (same as string-width library).
+// These originally used the ES2024 `v` (unicodeSets) flag. For Node 16 / Windows 7
+// compatibility the two single-code-point-property regexes use the `u` flag instead
+// (behaviourally identical here — no set operations), and the RGI_Emoji regex (a
+// string property that REQUIRES `v`) is built at runtime with a `u`-flag fallback.
+const zeroWidthRegex = /^(?:\p{Default_Ignorable_Code_Point}|\p{Control}|\p{Mark}|\p{Surrogate})+$/u;
+const leadingNonPrintingRegex = /^[\p{Default_Ignorable_Code_Point}\p{Control}\p{Format}\p{Mark}\p{Surrogate}]+/u;
+const nonPrintingCharRegex = /^(?:\p{Default_Ignorable_Code_Point}|\p{Control}|\p{Format}|\p{Mark}|\p{Surrogate})$/u;
+const markCharRegex = /^\p{Mark}$/u;
 const terminalSpacingMarkRegex =
-	/^(?:[\p{Spacing_Mark}--[\u1734\u302E\u302F]]|[\u065F\u0F7F\u102B\u102C\u1031\u1033-\u1035\u1038\u103A-\u103E])+$/v;
-const rgiEmojiRegex = /^\p{RGI_Emoji}$/v;
+	/^(?:(?![\u1734\u302E\u302F])\p{Spacing_Mark}|[\u065F\u0F7F\u102B\u102C\u1031\u1033-\u1035\u1038\u103A-\u103E])+$/u;
+const rgiEmojiRegex: RegExp = (() => {
+	try {
+		// Preferred: exact RGI emoji match (Node >= 20).
+		return new RegExp("^\\p{RGI_Emoji}$", "v");
+	} catch {
+		// Node < 20 has neither the `v` flag nor the RGI_Emoji string property.
+		// graphemeWidth() only tests already-segmented single grapheme clusters, so
+		// approximate "is emoji" as "contains a pictographic or regional-indicator
+		// code point". Slightly less precise for exotic sequences, but width-correct
+		// for the overwhelming majority of emoji.
+		return /[\p{Extended_Pictographic}\p{Regional_Indicator}]/u;
+	}
+})();
 
 // Cache for non-ASCII strings
 const WIDTH_CACHE_SIZE = 512;

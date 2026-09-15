@@ -1,0 +1,16 @@
+{
+  "name": "pi-win7-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Windows 7 / Node 16 install wrapper for the forked pi-coding-agent (undici@5). Place the packed pi-coding-agent tgz next to this file as pi-coding-agent.tgz, then run: npm install --ignore-scripts. See ../docs/win7.md.",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "file:pi-coding-agent.tgz"
+  },
+  "overrides": {
+    "glob": "10.4.5",
+    "minimatch": "9.0.5",
+    "hosted-git-info": "7.0.2",
+    "lru-cache": "10.4.3",
+    "path-scurry": "1.11.1"
+  }
+}

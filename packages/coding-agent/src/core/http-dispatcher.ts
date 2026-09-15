@@ -78,23 +78,84 @@ function createUndiciOriginDispatcher(origin: string | URL, options: object): un
 	);
 }
 
+// undici >= 6.19 ships EnvHttpProxyAgent and >= 7 ships install(); older majors
+// (undici@5, used for the Node 16 / Windows 7 build) provide neither, so we build
+// an equivalent dispatcher from Agent/ProxyAgent and wire fetch globals manually.
+const hasModernUndici =
+	typeof (undici as { EnvHttpProxyAgent?: unknown }).EnvHttpProxyAgent === "function" &&
+	typeof (undici as { install?: unknown }).install === "function";
+
+function firstProxyFromEnv(): string | undefined {
+	return (
+		process.env.HTTPS_PROXY ||
+		process.env.https_proxy ||
+		process.env.HTTP_PROXY ||
+		process.env.http_proxy ||
+		undefined
+	);
+}
+
+// undici@5 has no install(); mirror its effect by pointing the fetch globals at
+// this undici instance so they share the dispatcher configured below.
+function installUndiciFetchGlobals(): void {
+	const source = undici as unknown as Record<string, unknown>;
+	for (const name of ["fetch", "Response", "Request", "Headers", "FormData", "File"]) {
+		const value = source[name];
+		if (value !== undefined) {
+			(globalThis as unknown as Record<string, unknown>)[name] = value;
+		}
+	}
+}
+
+function buildModernDispatcher(timeoutMs: number): undici.Dispatcher {
+	const EnvHttpProxyAgent = (undici as unknown as { EnvHttpProxyAgent: new (opts: object) => undici.Dispatcher })
+		.EnvHttpProxyAgent;
+	return withUndiciErrorListener(
+		new EnvHttpProxyAgent({
+			allowH2: false,
+			bodyTimeout: timeoutMs,
+			connect: {
+				autoSelectFamilyAttemptTimeout: DEFAULT_AUTO_SELECT_FAMILY_ATTEMPT_TIMEOUT_MS,
+			},
+			headersTimeout: timeoutMs,
+			clientFactory: createUndiciClient,
+			factory: createUndiciOriginDispatcher,
+		}),
+	);
+}
+
+function buildLegacyDispatcher(timeoutMs: number): undici.Dispatcher {
+	const options = {
+		bodyTimeout: timeoutMs,
+		headersTimeout: timeoutMs,
+		factory: createUndiciOriginDispatcher,
+	} as Record<string, unknown>;
+	const proxy = firstProxyFromEnv();
+	const dispatcher = proxy
+		? new (undici as unknown as { ProxyAgent: new (opts: object) => undici.Dispatcher }).ProxyAgent({
+				uri: proxy,
+				...options,
+			})
+		: new (undici as unknown as { Agent: new (opts: object) => undici.Dispatcher }).Agent(options);
+	return withUndiciErrorListener(dispatcher);
+}
+
+function installFetchGlobals(): void {
+	if (hasModernUndici) {
+		(undici as unknown as { install?: () => void }).install?.();
+	} else {
+		installUndiciFetchGlobals();
+	}
+}
+
 export function configureHttpDispatcher(timeoutMs: number = DEFAULT_HTTP_IDLE_TIMEOUT_MS): void {
 	const normalizedTimeoutMs = parseHttpIdleTimeoutMs(timeoutMs);
 	if (normalizedTimeoutMs === undefined) {
 		throw new Error(`Invalid HTTP idle timeout: ${String(timeoutMs)}`);
 	}
-	const dispatcher = withUndiciErrorListener(
-		new undici.EnvHttpProxyAgent({
-			allowH2: false,
-			bodyTimeout: normalizedTimeoutMs,
-			connect: {
-				autoSelectFamilyAttemptTimeout: DEFAULT_AUTO_SELECT_FAMILY_ATTEMPT_TIMEOUT_MS,
-			},
-			headersTimeout: normalizedTimeoutMs,
-			clientFactory: createUndiciClient,
-			factory: createUndiciOriginDispatcher,
-		}),
-	);
+	const dispatcher = hasModernUndici
+		? buildModernDispatcher(normalizedTimeoutMs)
+		: buildLegacyDispatcher(normalizedTimeoutMs);
 	undici.setGlobalDispatcher(dispatcher);
 	// Keep fetch and the dispatcher on the same undici implementation. Node 26.0's
 	// bundled fetch can otherwise consume compressed responses through npm undici's
@@ -105,7 +166,7 @@ export function configureHttpDispatcher(timeoutMs: number = DEFAULT_HTTP_IDLE_TI
 			? globalThis.fetch === originalGlobalFetch
 			: globalThis.fetch === installedGlobalFetch;
 	if (shouldInstallGlobals) {
-		undici.install?.();
+		installFetchGlobals();
 		installedGlobalFetch = globalThis.fetch;
 	}
 }

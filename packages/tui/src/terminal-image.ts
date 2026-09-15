@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import { homedir } from "node:os";
 import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
+import { isLegacyWindowsConsole } from "./terminal.ts";
 
 export type ImageProtocol = "kitty" | "iterm2" | null;
 
@@ -73,6 +74,12 @@ function detectCapabilitiesFromEnvironment(tmuxForwardsHyperlink: () => boolean)
 	const colorTerm = process.env.COLORTERM?.toLowerCase() || "";
 	const hasTrueColorHint = colorTerm === "truecolor" || colorTerm === "24bit";
 	const isWindowsConsole = process.platform === "win32";
+
+	// ConEmu's VT renderer and Windows 7 consoles cannot reliably carry the
+	// modern color, hyperlink, or image protocols detected below.
+	if (process.env.ConEmuANSI === "ON" || isLegacyWindowsConsole()) {
+		return { images: null, trueColor: false, hyperlinks: false };
+	}
 
 	// Emit OSC 8 hyperlinks only when tmux confirms it forwards.
 	// Image protocols are unreliable under tmux, so leave `images: null`.

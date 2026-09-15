@@ -104,7 +104,28 @@ function getAliases(): Record<string, string> {
 		if (fs.existsSync(workspacePath)) {
 			return workspacePath;
 		}
-		return fileURLToPath(import.meta.resolve(specifier));
+		// import.meta.resolve is Node >= 20 only. On modern Node use it unchanged.
+		const metaResolve = (import.meta as unknown as { resolve?: (s: string) => string }).resolve;
+		if (typeof metaResolve === "function") {
+			return fileURLToPath(metaResolve(specifier));
+		}
+		// Node 16 (Windows 7) fallback: import.meta.resolve is undefined and
+		// require.resolve cannot resolve pi's ESM-only "exports" (no "require"
+		// condition). Resolve the installed package's dist entry directly. The
+		// installed layout mirrors the workspace path with the leading
+		// package-shortname segment dropped (e.g. "ai/dist/compat.js" ->
+		// "<pkgDir>/dist/compat.js").
+		const pkgName = specifier.startsWith("@")
+			? specifier.split("/").slice(0, 2).join("/")
+			: specifier.split("/")[0];
+		const installedRelative = workspaceRelativePath.split("/").slice(1).join("/");
+		for (const base of require.resolve.paths(pkgName) ?? []) {
+			const candidate = path.join(base, ...pkgName.split("/"), ...installedRelative.split("/"));
+			if (fs.existsSync(candidate)) {
+				return candidate;
+			}
+		}
+		throw new Error(`Cannot resolve extension dependency "${specifier}"`);
 	};
 
 	const piCodingAgentEntry = packageIndex;

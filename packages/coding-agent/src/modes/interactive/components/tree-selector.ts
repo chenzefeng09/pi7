@@ -4,6 +4,7 @@ import {
 	type Focusable,
 	getKeybindings,
 	Input,
+	isLegacyWindowsConsole,
 	type Keybinding,
 	Spacer,
 	sliceByColumn,
@@ -46,6 +47,11 @@ interface HorizontalViewportRow {
 	isSelected: boolean;
 }
 
+// Win7-era console fonts lack U+229E ⊞ / U+229F ⊟; use +/- on Windows 7
+// (ConEmu or otherwise).
+const IS_LEGACY_WINDOWS_TERMINAL = process.env.ConEmuANSI === "ON" || isLegacyWindowsConsole();
+const FOLDED_MARK = IS_LEGACY_WINDOWS_TERMINAL ? "+" : "⊞";
+const UNFOLDED_MARK = IS_LEGACY_WINDOWS_TERMINAL ? "-" : "⊟";
 const TREE_GUTTER_WIDTH = 2;
 const MIN_VISIBLE_ANCHOR_CONTENT_WIDTH = 4;
 const MAX_VISIBLE_ANCHOR_CONTENT_WIDTH = 20;
@@ -719,7 +725,7 @@ class TreeList implements Component {
 						prefixChars.push(flatNode.isLast ? "└" : "├");
 					} else if (posInLevel === 1) {
 						const foldable = this.isFoldable(entry.id);
-						prefixChars.push(isFolded ? "⊞" : foldable ? "⊟" : "─");
+						prefixChars.push(isFolded ? FOLDED_MARK : foldable ? UNFOLDED_MARK : "─");
 					} else {
 						prefixChars.push(" ");
 					}
@@ -731,7 +737,7 @@ class TreeList implements Component {
 
 			// Fold marker for nodes without connectors (roots)
 			const showsFoldInConnector = flatNode.showConnector && !flatNode.isVirtualRootChild;
-			const foldMarker = isFolded && !showsFoldInConnector ? theme.fg("accent", "⊞ ") : "";
+			const foldMarker = isFolded && !showsFoldInConnector ? theme.fg("accent", `${FOLDED_MARK} `) : "";
 
 			// Active path marker - shown right before the entry text
 			const isOnActivePath = this.activePathIds.has(entry.id);

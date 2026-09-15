@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.test-agent/
+resources/pi-win7/
+release/
+artifacts/
+.playwright-cli/
+.pi/
+config/agent/
+*.log

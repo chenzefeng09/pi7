@@ -8,6 +8,7 @@ import {
 	type Focusable,
 	getKeybindings,
 	Input,
+	isLegacyWindowsConsole,
 	Spacer,
 	Text,
 	truncateToWidth,
@@ -137,14 +138,17 @@ class SessionSelectorHeader implements Component {
 		const nameLabel = this.nameFilter === "all" ? "All" : "Named";
 		const nameText = theme.fg("muted", "Name: ") + theme.fg("accent", nameLabel);
 
+		// Win7-era console fonts lack U+25C9 ◉ (fisheye); use the widely-covered
+		// filled circle for the selected radio on Windows 7 (ConEmu or otherwise).
+		const radioOn = process.env.ConEmuANSI === "ON" || isLegacyWindowsConsole() ? "●" : "◉";
 		let scopeText: string;
 		if (this.loading) {
 			const progressText = this.loadProgress ? `${this.loadProgress.loaded}/${this.loadProgress.total}` : "...";
 			scopeText = `${theme.fg("muted", "○ Current Folder | ")}${theme.fg("accent", `Loading ${progressText}`)}`;
 		} else if (this.scope === "current") {
-			scopeText = `${theme.fg("accent", "◉ Current Folder")}${theme.fg("muted", " | ○ All")}`;
+			scopeText = `${theme.fg("accent", `${radioOn} Current Folder`)}${theme.fg("muted", " | ○ All")}`;
 		} else {
-			scopeText = `${theme.fg("muted", "○ Current Folder | ")}${theme.fg("accent", "◉ All")}`;
+			scopeText = `${theme.fg("muted", "○ Current Folder | ")}${theme.fg("accent", `${radioOn} All`)}`;
 		}
 
 		const rightText = truncateToWidth(`${scopeText}  ${nameText}  ${sortText}`, width, "");

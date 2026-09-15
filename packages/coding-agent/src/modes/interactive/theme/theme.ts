@@ -4,6 +4,7 @@ import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import {
 	type EditorTheme,
 	getCapabilities,
+	isLegacyWindowsConsole,
 	type MarkdownTheme,
 	type RgbColor,
 	type SelectListTheme,
@@ -172,7 +173,7 @@ export type ThemeBg =
 type OptionalThemeColor = "thinkingMax" | "searchMatchText";
 type OptionalThemeBg = "scrollbarThumb" | "searchMatchBg";
 
-type ColorMode = "truecolor" | "256color";
+type ColorMode = "truecolor" | "256color" | "16color";
 
 // ============================================================================
 // Color Utilities
@@ -270,8 +271,129 @@ function hexTo256(hex: string): number {
 	return rgbTo256(r, g, b);
 }
 
+// ============================================================================
+// 16-color mode (Windows 7 / ConEmu)
+//
+// ConEmu renders the basic 16 SGR colors correctly but quantizes 256-color
+// SGR badly and silently drops 24-bit SGR, so on ConEmu the theme degrades
+// to the 16 ANSI colors. See docs/win7.md.
+// ============================================================================
+
+// Canonical xterm palette values for SGR 30-37 / 90-97.
+const ANSI16_RGB: ReadonlyArray<readonly [number, number, number]> = [
+	[0, 0, 0],
+	[205, 0, 0],
+	[0, 205, 0],
+	[205, 205, 0],
+	[0, 0, 238],
+	[205, 0, 205],
+	[0, 205, 205],
+	[229, 229, 229],
+	[127, 127, 127],
+	[255, 0, 0],
+	[0, 255, 0],
+	[255, 255, 0],
+	[92, 92, 255],
+	[255, 0, 255],
+	[0, 255, 255],
+	[255, 255, 255],
+];
+
+function idx256ToRgb(n: number): { r: number; g: number; b: number } {
+	if (n < 16) {
+		const [r, g, b] = ANSI16_RGB[n];
+		return { r, g, b };
+	}
+	if (n >= 232) {
+		const v = 8 + (n - 232) * 10;
+		return { r: v, g: v, b: v };
+	}
+	const i = n - 16;
+	return {
+		r: CUBE_VALUES[Math.floor(i / 36)],
+		g: CUBE_VALUES[Math.floor(i / 6) % 6],
+		b: CUBE_VALUES[i % 6],
+	};
+}
+
+/**
+ * Map an RGB color to one of the 16 ANSI colors (palette index 0-15).
+ *
+ * Chromatic colors are classified by HUE family, not nearest-RGB distance:
+ * theme palettes are pastel, and by distance every pastel accent lands on
+ * white. Dark backgrounds map to plain black rather than bright-black — the
+ * bright-black slot is shared with dim foreground text, so using it for
+ * large background blocks renders as bright gray bars (the exact artifact
+ * this mode exists to avoid).
+ */
+function rgbTo16(r: number, g: number, b: number, isBackground: boolean): number {
+	const max = Math.max(r, g, b);
+	const min = Math.min(r, g, b);
+	const spread = max - min;
+	const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+	const sat = max === 0 ? 0 : spread / max;
+
+	if (sat < 0.25) {
+		// Near-neutral: pick by brightness.
+		if (isBackground) return lum < 80 ? 0 : lum < 150 ? 8 : lum < 215 ? 7 : 15;
+		if (lum >= 200) return 15;
+		if (lum >= 150) return 7;
+		return 8;
+	}
+	// Dark tinted backgrounds (message blocks, panels) → black.
+	if (isBackground && lum < 70) return 0;
+	// Dark desaturated foregrounds (border/separator tints) → gray, not a
+	// saturated primary.
+	if (!isBackground && lum < 70 && sat < 0.5) return 8;
+
+	// Chromatic: classify by hue family, then normal/bright by luminance.
+	let hue: number;
+	if (max === r) hue = 60 * (((g - b) / spread) % 6);
+	else if (max === g) hue = 60 * ((b - r) / spread + 2);
+	else hue = 60 * ((r - g) / spread + 4);
+	if (hue < 0) hue += 360;
+
+	let family: number; // ANSI: 1 red, 2 green, 3 yellow, 4 blue, 5 magenta, 6 cyan
+	if (hue < 20 || hue >= 330) family = 1;
+	else if (hue < 70) family = 3;
+	else if (hue < 160) family = 2;
+	else if (hue < 200) family = 6;
+	else if (hue < 260) family = 4;
+	else family = 5;
+
+	return lum >= 140 ? family + 8 : family;
+}
+
+function ansi16Code(color: string | number, isBackground: boolean): number {
+	const rgb = typeof color === "number" ? idx256ToRgb(color) : hexToRgb(color);
+	const idx = rgbTo16(rgb.r, rgb.g, rgb.b, isBackground);
+	const base = isBackground ? (idx < 8 ? 40 : 100 - 8) : idx < 8 ? 30 : 90 - 8;
+	return base + idx;
+}
+
+/**
+ * Pick the theme color mode. PI_TUI_COLOR overrides ("16" | "256" |
+ * "truecolor"); ConEmu (Windows 7) is forced to 16-color — the probe-verified
+ * limit of what it renders faithfully. Any other Windows 7 terminal (winpty
+ * screen-scraping, e.g. VS Code) shares the same ceiling — 256/truecolor SGR
+ * either gets dropped or quantized to a gray-bar-producing fallback, so it is
+ * forced to 16-color too. Everything else follows terminal capability
+ * detection.
+ */
+function detectColorMode(): ColorMode {
+	const forced = process.env.PI_TUI_COLOR;
+	if (forced === "16") return "16color";
+	if (forced === "256") return "256color";
+	if (forced === "truecolor" || forced === "24bit") return "truecolor";
+	if (process.env.ConEmuANSI === "ON" || isLegacyWindowsConsole()) return "16color";
+	return getCapabilities().trueColor ? "truecolor" : "256color";
+}
+
 function fgAnsi(color: string | number, mode: ColorMode): string {
 	if (color === "") return "\x1b[39m";
+	if (mode === "16color" && (typeof color === "number" || color.startsWith("#"))) {
+		return `\x1b[${ansi16Code(color, false)}m`;
+	}
 	if (typeof color === "number") return `\x1b[38;5;${color}m`;
 	if (color.startsWith("#")) {
 		if (mode === "truecolor") {
@@ -287,6 +409,9 @@ function fgAnsi(color: string | number, mode: ColorMode): string {
 
 function bgAnsi(color: string | number, mode: ColorMode): string {
 	if (color === "") return "\x1b[49m";
+	if (mode === "16color" && (typeof color === "number" || color.startsWith("#"))) {
+		return `\x1b[${ansi16Code(color, true)}m`;
+	}
 	if (typeof color === "number") return `\x1b[48;5;${color}m`;
 	if (color.startsWith("#")) {
 		if (mode === "truecolor") {
@@ -627,7 +752,7 @@ function loadThemeJson(name: string): ThemeJson {
 }
 
 function createTheme(themeJson: ThemeJson, mode?: ColorMode, sourcePath?: string): Theme {
-	const colorMode = mode ?? (getCapabilities().trueColor ? "truecolor" : "256color");
+	const colorMode = mode ?? detectColorMode();
 	const resolvedColors = resolveThemeColors(withThemeColorFallbacks(themeJson.colors), themeJson.vars);
 	const fgColors: Record<ThemeColor, string | number> = {} as Record<ThemeColor, string | number>;
 	const bgColors: Record<ThemeBg, string | number> = {} as Record<ThemeBg, string | number>;

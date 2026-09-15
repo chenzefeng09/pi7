@@ -1,3 +1,4 @@
+import { isLegacyWindowsConsole } from "../terminal.ts";
 import type { TUI } from "../tui.ts";
 import { Text } from "./text.ts";
 
@@ -8,7 +9,21 @@ export interface LoaderIndicatorOptions {
 	intervalMs?: number;
 }
 
-const DEFAULT_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const BRAILLE_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const ASCII_FRAMES = ["|", "/", "-", "\\"];
+
+// Windows 7 era console fonts (Consolas/Lucida Console) lack the Braille
+// block, so the default spinner renders as placeholder boxes there (ConEmu or
+// any other Win7 terminal). Fall back to ASCII frames. Override with
+// PI_TUI_ASCII=1/0.
+function defaultFrames(): string[] {
+	const override = process.env.PI_TUI_ASCII;
+	if (override === "1") return ASCII_FRAMES;
+	if (override === "0") return BRAILLE_FRAMES;
+	return process.env.ConEmuANSI === "ON" || isLegacyWindowsConsole() ? ASCII_FRAMES : BRAILLE_FRAMES;
+}
+
+const DEFAULT_FRAMES = defaultFrames();
 const DEFAULT_INTERVAL_MS = 80;
 
 /**

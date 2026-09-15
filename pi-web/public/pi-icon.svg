@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+	<title id="title">pi</title>
+	<desc id="desc">A clean geometric pi emblem</desc>
+	<rect width="512" height="512" rx="128" fill="#F1EAE2"/>
+	<circle cx="256" cy="256" r="194" fill="#193B59"/>
+	<path d="M139 172h234" fill="none" stroke="#F5A65B" stroke-linecap="round" stroke-width="42"/>
+	<path d="M177 172 154 352" fill="none" stroke="#F5A65B" stroke-linecap="round" stroke-width="42"/>
+	<path d="m335 172-23 180" fill="none" stroke="#F5A65B" stroke-linecap="round" stroke-width="42"/>
+</svg>

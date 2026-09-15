@@ -1,0 +1,853 @@
+diff --git a/packages/coding-agent/src/core/agent-session-runtime.ts b/packages/coding-agent/src/core/agent-session-runtime.ts
+index c3b60569..d15b802b 100644
+--- a/packages/coding-agent/src/core/agent-session-runtime.ts
++++ b/packages/coding-agent/src/core/agent-session-runtime.ts
+@@ -223,6 +223,37 @@ export class AgentSessionRuntime {
+ 		return { cancelled: false };
+ 	}
+ 
++	/**
++	 * Create an additional runtime for another session without disturbing this one.
++	 *
++	 * Hosts that keep several sessions alive in a single process (the RPC protocol's
++	 * `open_session` command) use this: the returned runtime owns its own cwd-bound services
++	 * and session, and can stream while this one keeps running. No `session_before_switch`
++	 * handler runs because nothing is being replaced.
++	 */
++	async openSibling(options?: { cwd?: string; sessionPath?: string }): Promise<AgentSessionRuntime> {
++		const sessionManager = options?.sessionPath
++			? SessionManager.open(options.sessionPath, undefined, options.cwd)
++			: SessionManager.create(options?.cwd ?? this.cwd, this.session.sessionManager.getSessionDir());
++		assertSessionCwdExists(sessionManager, this.cwd);
++		const result = await this.createRuntime({
++			cwd: sessionManager.getCwd(),
++			agentDir: this.services.agentDir,
++			sessionManager,
++			sessionStartEvent: {
++				type: "session_start",
++				reason: options?.sessionPath ? "resume" : "new",
++			},
++		});
++		return new AgentSessionRuntime(
++			result.session,
++			result.services,
++			this.createRuntime,
++			result.diagnostics,
++			result.modelFallbackMessage,
++		);
++	}
++
+ 	async newSession(options?: {
+ 		parentSession?: string;
+ 		setup?: (sessionManager: SessionManager) => Promise<void>;
+diff --git a/packages/coding-agent/src/core/extensions/index.ts b/packages/coding-agent/src/core/extensions/index.ts
+index f19816a9..9fd8f0bb 100644
+--- a/packages/coding-agent/src/core/extensions/index.ts
++++ b/packages/coding-agent/src/core/extensions/index.ts
+@@ -5,6 +5,7 @@
+ export type { SlashCommandInfo, SlashCommandSource } from "../slash-commands.ts";
+ export type { SourceInfo } from "../source-info.ts";
+ export {
++	clearExtensionCache,
+ 	createExtensionRuntime,
+ 	discoverAndLoadExtensions,
+ 	loadExtensionFromFactory,
+diff --git a/packages/coding-agent/src/modes/rpc/rpc-mode.ts b/packages/coding-agent/src/modes/rpc/rpc-mode.ts
+index fc8083be..de6a010b 100644
+--- a/packages/coding-agent/src/modes/rpc/rpc-mode.ts
++++ b/packages/coding-agent/src/modes/rpc/rpc-mode.ts
+@@ -12,6 +12,8 @@
+  */
+ 
+ import * as crypto from "node:crypto";
++import { resolve as resolvePath } from "node:path";
++import type { AgentSession } from "../../core/agent-session.ts";
+ import type { AgentSessionRuntime } from "../../core/agent-session-runtime.ts";
+ import type {
+ 	ExtensionUIContext,
+@@ -19,6 +21,7 @@ import type {
+ 	ExtensionWidgetOptions,
+ 	WorkingIndicatorOptions,
+ } from "../../core/extensions/index.ts";
++import { clearExtensionCache } from "../../core/extensions/index.ts";
+ import {
+ 	flushRawStdout,
+ 	takeOverStdout,
+@@ -30,32 +33,58 @@ import { type Theme, theme } from "../interactive/theme/theme.ts";
+ import { toJsonEvent } from "../json-event.ts";
+ import { attachJsonlLineReader, serializeJsonLine } from "./jsonl.ts";
+ import type {
++	RpcCapabilities,
+ 	RpcCommand,
+ 	RpcExtensionUIRequest,
+ 	RpcExtensionUIResponse,
++	RpcOpenSession,
+ 	RpcResponse,
+ 	RpcSessionState,
+ 	RpcSlashCommand,
+ } from "./rpc-types.ts";
++import { RPC_PROTOCOL_VERSION } from "./rpc-types.ts";
+ 
+ // Re-export types for consumers
+ export type {
++	RpcCapabilities,
+ 	RpcCommand,
+ 	RpcExtensionUIRequest,
+ 	RpcExtensionUIResponse,
++	RpcOpenSession,
+ 	RpcResponse,
+ 	RpcSessionState,
+ } from "./rpc-types.ts";
+ 
++/**
++ * One live session runtime owned by this process.
++ *
++ * A handle keeps its id for its whole life even when the session it holds is replaced
++ * (`new_session`, `switch_session`), so a host can keep addressing a background session.
++ */
++interface RpcSessionHandle {
++	runtime: AgentSessionRuntime;
++	session: AgentSession;
++	unsubscribe?: () => void;
++	unsubscribeBackpressure?: () => void;
++}
++
+ /**
+  * Run in RPC mode.
+  * Listens for JSON commands on stdin, outputs events and responses on stdout.
++ *
++ * The process can hold several sessions at once (`open_session`): each one streams
++ * independently and every event line carries the `sessionId` of the handle it came from.
++ * Commands without a `sessionId` address the active handle, which is what single-session
++ * clients have always done.
+  */
+ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<never> {
+ 	takeOverStdout();
+-	let session = runtimeHost.session;
+-	let unsubscribe: (() => void) | undefined;
+-	let unsubscribeBackpressure: (() => void) | undefined;
++	const handles = new Map<string, RpcSessionHandle>();
++	/** In-flight `open_session` calls, so two opens of one file share a single runtime. */
++	const pendingOpens = new Map<string, Promise<string>>();
++	const INITIAL_HANDLE_ID = "s1";
++	let activeHandleId = INITIAL_HANDLE_ID;
++	let nextHandleId = 2;
+ 
+ 	const output = (obj: RpcResponse | RpcExtensionUIRequest | object) => {
+ 		writeRawStdout(serializeJsonLine(obj));
+@@ -76,10 +105,11 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
+ 		return { id, type: "response", command, success: false, error: message };
+ 	};
+ 
+-	// Pending extension UI requests waiting for response
++	// Pending extension UI requests waiting for response, tagged with the session that asked
++	// so that closing a session can settle the dialogs it left open.
+ 	const pendingExtensionRequests = new Map<
+ 		string,
+-		{ resolve: (value: any) => void; reject: (error: Error) => void }
++		{ resolve: (value: any) => void; reject: (error: Error) => void; sessionId?: string }
+ 	>();
+ 
+ 	// Shutdown request flag
+@@ -87,8 +117,67 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
+ 	let shuttingDown = false;
+ 	const signalCleanupHandlers: Array<() => void> = [];
+ 
++	const activeHandle = (): RpcSessionHandle => {
++		const handle = handles.get(activeHandleId);
++		if (!handle) throw new Error(`Active session ${activeHandleId} is not open`);
++		return handle;
++	};
++
++	/** Route a command to the handle it names, or to the active one when it names none. */
++	const resolveHandle = (sessionId?: string): { handle: RpcSessionHandle; handleId: string } => {
++		if (!sessionId) return { handle: activeHandle(), handleId: activeHandleId };
++		const handle = handles.get(sessionId);
++		if (!handle) throw new Error(`Unknown sessionId: ${sessionId}`);
++		return { handle, handleId: sessionId };
++	};
++
++	const activateHandle = (handleId: string): void => {
++		activeHandleId = handleId;
++	};
++
++	const describeHandle = (handleId: string, handle: RpcSessionHandle): RpcOpenSession => ({
++		active: handleId === activeHandleId,
++		cwd: handle.runtime.cwd,
++		isStreaming: handle.session.isStreaming,
++		messageCount: handle.session.messages.length,
++		piSessionId: handle.session.sessionId,
++		sessionFile: handle.session.sessionFile,
++		sessionId: handleId,
++		sessionName: handle.session.sessionName,
++	});
++
++	/** Settle dialogs a session left open so its extensions stop waiting. */
++	const cancelPendingRequests = (handleId: string): void => {
++		for (const [requestId, pending] of pendingExtensionRequests) {
++			if (pending.sessionId !== handleId) continue;
++			pendingExtensionRequests.delete(requestId);
++			pending.resolve({ cancelled: true, id: requestId } as RpcExtensionUIResponse);
++		}
++	};
++
++	/**
++	 * A session file may only be loaded once per process: pi appends to the JSONL without
++	 * locking, so two runtimes on one file interleave or truncate each other's transcript.
++	 * Windows paths are compared case-insensitively.
++	 */
++	const sessionFileKey = (file: string | undefined): string | undefined => {
++		if (file === undefined) return undefined;
++		return process.platform === "win32" ? file.toLowerCase() : file;
++	};
++
++	const assertSessionFileFree = (sessionPath: string, handleId: string): void => {
++		const target = sessionFileKey(resolvePath(sessionPath));
++		for (const [otherId, other] of handles) {
++			if (otherId === handleId) continue;
++			if (sessionFileKey(other.session.sessionFile) === target) {
++				throw new Error(`Session is already open as ${otherId}: ${sessionPath}`);
++			}
++		}
++	};
++
+ 	/** Helper for dialog methods with signal/timeout support */
+ 	function createDialogPromise<T>(
++		handleId: string,
+ 		opts: ExtensionUIDialogOptions | undefined,
+ 		defaultValue: T,
+ 		request: Record<string, unknown>,
+@@ -125,28 +214,41 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
+ 					resolve(parseResponse(response));
+ 				},
+ 				reject,
++				sessionId: handleId,
+ 			});
+-			output({ type: "extension_ui_request", id, ...request } as RpcExtensionUIRequest);
++			output({ type: "extension_ui_request", id, sessionId: handleId, ...request } as RpcExtensionUIRequest);
+ 		});
+ 	}
+ 
+ 	/**
+-	 * Create an extension UI context that uses the RPC protocol.
++	 * Create an extension UI context that uses the RPC protocol for one session handle.
+ 	 */
+-	const createExtensionUIContext = (): ExtensionUIContext => ({
++	const createExtensionUIContext = (handleId: string): ExtensionUIContext => ({
+ 		select: (title, options, opts) =>
+-			createDialogPromise(opts, undefined, { method: "select", title, options, timeout: opts?.timeout }, (r) =>
+-				"cancelled" in r && r.cancelled ? undefined : "value" in r ? r.value : undefined,
++			createDialogPromise(
++				handleId,
++				opts,
++				undefined,
++				{ method: "select", title, options, timeout: opts?.timeout },
++				(r) => ("cancelled" in r && r.cancelled ? undefined : "value" in r ? r.value : undefined),
+ 			),
+ 
+ 		confirm: (title, message, opts) =>
+-			createDialogPromise(opts, false, { method: "confirm", title, message, timeout: opts?.timeout }, (r) =>
+-				"cancelled" in r && r.cancelled ? false : "confirmed" in r ? r.confirmed : false,
++			createDialogPromise(
++				handleId,
++				opts,
++				false,
++				{ method: "confirm", title, message, timeout: opts?.timeout },
++				(r) => ("cancelled" in r && r.cancelled ? false : "confirmed" in r ? r.confirmed : false),
+ 			),
+ 
+ 		input: (title, placeholder, opts) =>
+-			createDialogPromise(opts, undefined, { method: "input", title, placeholder, timeout: opts?.timeout }, (r) =>
+-				"cancelled" in r && r.cancelled ? undefined : "value" in r ? r.value : undefined,
++			createDialogPromise(
++				handleId,
++				opts,
++				undefined,
++				{ method: "input", title, placeholder, timeout: opts?.timeout },
++				(r) => ("cancelled" in r && r.cancelled ? undefined : "value" in r ? r.value : undefined),
+ 			),
+ 
+ 		notify(message: string, type?: "info" | "warning" | "error"): void {
+@@ -157,6 +259,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
+ 				method: "notify",
+ 				message,
+ 				notifyType: type,
++				sessionId: handleId,
+ 			} as RpcExtensionUIRequest);
+ 		},
+ 
+@@ -173,6 +276,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
+ 				method: "setStatus",
+ 				statusKey: key,
+ 				statusText: text,
++				sessionId: handleId,
+ 			} as RpcExtensionUIRequest);
+ 		},
+ 
+@@ -222,6 +326,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
+ 				id: crypto.randomUUID(),
+ 				method: "setTitle",
+ 				title,
++				sessionId: handleId,
+ 			} as RpcExtensionUIRequest);
+ 		},
+ 
+@@ -242,6 +347,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
+ 				id: crypto.randomUUID(),
+ 				method: "set_editor_text",
+ 				text,
++				sessionId: handleId,
+ 			} as RpcExtensionUIRequest);
+ 		},
+ 
+@@ -265,8 +371,16 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
+ 						}
+ 					},
+ 					reject,
++					sessionId: handleId,
+ 				});
+-				output({ type: "extension_ui_request", id, method: "editor", title, prefill } as RpcExtensionUIRequest);
++				output({
++					type: "extension_ui_request",
++					id,
++					method: "editor",
++					title,
++					prefill,
++					sessionId: handleId,
++				} as RpcExtensionUIRequest);
+ 			});
+ 		},
+ 
+@@ -310,24 +424,27 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
+ 		},
+ 	});
+ 
+-	runtimeHost.setRebindSession(async () => {
+-		await rebindSession();
+-	});
+-
+-	const rebindSession = async (): Promise<void> => {
+-		session = runtimeHost.session;
+-		await session.bindExtensions({
+-			uiContext: createExtensionUIContext(),
++	/**
++	 * Attach the RPC bridge (extension UI, events, backpressure) to the session a handle
++	 * currently holds. Runs again whenever that handle replaces its session.
++	 */
++	const bindHandle = async (handleId: string): Promise<void> => {
++		const handle = handles.get(handleId);
++		if (!handle) return;
++		const handleSession = handle.runtime.session;
++		handle.session = handleSession;
++		await handleSession.bindExtensions({
++			uiContext: createExtensionUIContext(handleId),
+ 			mode: "rpc",
+ 			commandContextActions: {
+-				waitForIdle: () => session.waitForIdle(),
+-				newSession: async (options) => runtimeHost.newSession(options),
++				waitForIdle: () => handleSession.waitForIdle(),
++				newSession: async (options) => handle.runtime.newSession(options),
+ 				fork: async (entryId, forkOptions) => {
+-					const result = await runtimeHost.fork(entryId, forkOptions);
++					const result = await handle.runtime.fork(entryId, forkOptions);
+ 					return { cancelled: result.cancelled };
+ 				},
+ 				navigateTree: async (targetId, options) => {
+-					const result = await session.navigateTree(targetId, {
++					const result = await handleSession.navigateTree(targetId, {
+ 						summarize: options?.summarize,
+ 						customInstructions: options?.customInstructions,
+ 						replaceInstructions: options?.replaceInstructions,
+@@ -336,29 +453,36 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
+ 					return { cancelled: result.cancelled };
+ 				},
+ 				switchSession: async (sessionPath, options) => {
+-					return runtimeHost.switchSession(sessionPath, options);
++					assertSessionFileFree(sessionPath, handleId);
++					return handle.runtime.switchSession(sessionPath, options);
+ 				},
+ 				reload: async () => {
+-					await session.reload();
++					await handleSession.reload();
+ 				},
+ 			},
+ 			shutdownHandler: () => {
+ 				shutdownRequested = true;
+ 			},
+ 			onError: (err) => {
+-				output({ type: "extension_error", extensionPath: err.extensionPath, event: err.event, error: err.error });
++				output({
++					type: "extension_error",
++					extensionPath: err.extensionPath,
++					event: err.event,
++					error: err.error,
++					sessionId: handleId,
++				});
+ 			},
+ 		});
+ 
+-		unsubscribe?.();
+-		unsubscribeBackpressure?.();
+-		unsubscribe = session.subscribe((event) => {
+-			output(toJsonEvent(event));
++		handle.unsubscribe?.();
++		handle.unsubscribeBackpressure?.();
++		handle.unsubscribe = handleSession.subscribe((event) => {
++			output({ ...toJsonEvent(event), sessionId: handleId });
+ 			if (event.type === "agent_settled") {
+ 				void checkShutdownRequested();
+ 			}
+ 		});
+-		unsubscribeBackpressure = session.agent.subscribe(async () => {
++		handle.unsubscribeBackpressure = handleSession.agent.subscribe(async () => {
+ 			await waitForRawStdoutBackpressure();
+ 		});
+ 	};
+@@ -379,13 +503,33 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
+ 		}
+ 	};
+ 
+-	await rebindSession();
++	handles.set(INITIAL_HANDLE_ID, { runtime: runtimeHost, session: runtimeHost.session });
++	runtimeHost.setRebindSession(async () => {
++		await bindHandle(INITIAL_HANDLE_ID);
++	});
++	await bindHandle(INITIAL_HANDLE_ID);
+ 	registerSignalHandlers();
+ 
+ 	// Handle a single command
+ 	const handleCommand = async (command: RpcCommand): Promise<RpcResponse | undefined> => {
+ 		const id = command.id;
+ 
++		// Every command runs against one session handle: the one it names, or the active one.
++		// The three session-lifecycle commands are not scoped to a session and use the active
++		// handle only as the runtime that creates siblings.
++		const sessionScoped =
++			command.type !== "get_capabilities" && command.type !== "open_session" && command.type !== "get_open_sessions";
++		const target = sessionScoped
++			? resolveHandle(command.sessionId)
++			: { handle: activeHandle(), handleId: activeHandleId };
++		const { handle, handleId } = target;
++		// Shadow the single-session names so the command bodies below stay unchanged.
++		const session = handle.session;
++		const runtimeHost = handle.runtime;
++		const rebindSession = async (): Promise<void> => {
++			await bindHandle(handleId);
++		};
++
+ 		switch (command.type) {
+ 			// =================================================================
+ 			// Prompting
+@@ -603,6 +747,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
+ 			}
+ 
+ 			case "switch_session": {
++				assertSessionFileFree(command.sessionPath, handleId);
+ 				const result = await runtimeHost.switchSession(command.sessionPath);
+ 				if (!result.cancelled) {
+ 					await rebindSession();
+@@ -712,6 +857,89 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
+ 				return success(id, "get_commands", { commands });
+ 			}
+ 
++			// =================================================================
++			// Multiple sessions in one process
++			// =================================================================
++
++			case "get_capabilities": {
++				const capabilities: RpcCapabilities = {
++					multiSession: true,
++					protocolVersion: RPC_PROTOCOL_VERSION,
++				};
++				return success(id, "get_capabilities", capabilities);
++			}
++
++			case "open_session": {
++				const wantedFile = command.sessionPath ? resolvePath(command.sessionPath) : undefined;
++				// Never load the same session file twice: two runtimes writing one JSONL would
++				// interleave and corrupt it. Re-opening returns the handle that already has it.
++				const wantedKey = sessionFileKey(wantedFile);
++				const existing = wantedKey
++					? [...handles.entries()].find(([, item]) => sessionFileKey(item.session.sessionFile) === wantedKey)
++					: undefined;
++				if (existing) {
++					const [existingId] = existing;
++					if (command.activate !== false) activateHandle(existingId);
++					return success(id, "open_session", describeHandle(existingId, existing[1]));
++				}
++
++				// Opens of the same file are serialized (a double click must not race the check
++				// above); each `open_session` without a path still creates its own session.
++				const openKey = wantedKey ?? `new:${crypto.randomUUID()}`;
++				let pendingOpen = pendingOpens.get(openKey);
++				if (!pendingOpen) {
++					// Force a fresh extension module per session: the extension cache is keyed by
++					// resolved path, so a cache hit would hand two sessions the same module instance
++					// and with it the same module-level state.
++					clearExtensionCache();
++					pendingOpen = (async () => {
++						const sibling = await activeHandle().runtime.openSibling({
++							cwd: command.cwd,
++							sessionPath: wantedFile,
++						});
++						const handleId = `s${nextHandleId++}`;
++						const opened: RpcSessionHandle = { runtime: sibling, session: sibling.session };
++						handles.set(handleId, opened);
++						sibling.setRebindSession(async () => {
++							await bindHandle(handleId);
++						});
++						await bindHandle(handleId);
++						return handleId;
++					})().finally(() => pendingOpens.delete(openKey));
++					pendingOpens.set(openKey, pendingOpen);
++				}
++				const handleId = await pendingOpen;
++				if (command.activate !== false) activateHandle(handleId);
++				return success(id, "open_session", describeHandle(handleId, handles.get(handleId) ?? activeHandle()));
++			}
++
++			case "close_session": {
++				const closeId = command.sessionId;
++				const closing = handles.get(closeId);
++				if (!closing) return error(id, "close_session", `Unknown sessionId: ${closeId}`);
++				if (handles.size === 1) {
++					return error(id, "close_session", "Cannot close the last open session in the process");
++				}
++
++				handles.delete(closeId);
++				cancelPendingRequests(closeId);
++				closing.unsubscribe?.();
++				closing.unsubscribeBackpressure?.();
++				await closing.runtime.dispose();
++				if (activeHandleId === closeId) {
++					const next = handles.keys().next();
++					if (!next.done) activateHandle(next.value);
++				}
++				return success(id, "close_session", { activeSessionId: activeHandleId, closed: true });
++			}
++
++			case "get_open_sessions": {
++				return success(id, "get_open_sessions", {
++					activeSessionId: activeHandleId,
++					sessions: [...handles.entries()].map(([openId, item]) => describeHandle(openId, item)),
++				});
++			}
++
+ 			default: {
+ 				const unknownCommand = command as { type: string };
+ 				return error(id, unknownCommand.type, `Unknown command: ${unknownCommand.type}`);
+@@ -733,9 +961,12 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
+ 		for (const cleanup of signalCleanupHandlers) {
+ 			cleanup();
+ 		}
+-		unsubscribe?.();
+-		unsubscribeBackpressure?.();
+-		await runtimeHost.dispose();
++		for (const handle of handles.values()) {
++			handle.unsubscribe?.();
++			handle.unsubscribeBackpressure?.();
++			await handle.runtime.dispose();
++		}
++		handles.clear();
+ 		detachInput();
+ 		process.stdin.pause();
+ 		if (signal !== "SIGTERM") {
+diff --git a/packages/coding-agent/src/modes/rpc/rpc-types.ts b/packages/coding-agent/src/modes/rpc/rpc-types.ts
+index 1cbd49a8..0386715b 100644
+--- a/packages/coding-agent/src/modes/rpc/rpc-types.ts
++++ b/packages/coding-agent/src/modes/rpc/rpc-types.ts
+@@ -12,66 +12,124 @@ import type { BashResult } from "../../core/bash-executor.ts";
+ import type { CompactionResult } from "../../core/compaction/index.ts";
+ import type { SessionEntry, SessionTreeNode } from "../../core/session-manager.ts";
+ import type { SourceInfo } from "../../core/source-info.ts";
++import type { JsonAgentSessionEvent } from "../json-event.ts";
++
++/** Bumped when the RPC protocol gains commands a client must know about. */
++export const RPC_PROTOCOL_VERSION = 2;
++
++/**
++ * Addresses one session runtime instead of the active one.
++ *
++ * `sessionId` is the handle id returned by `open_session`, not the pi session id: a handle
++ * keeps its id when it switches to another session file (`new_session`, `switch_session`).
++ * Omit it to target the active session, which is what single-session clients do.
++ */
++export interface RpcSessionTarget {
++	sessionId?: string;
++}
+ 
+ // ============================================================================
+ // RPC Commands (stdin)
+ // ============================================================================
+ 
+-export type RpcCommand =
++export type RpcCommand = RpcSessionTarget &
+ 	// Prompting
+-	| { id?: string; type: "prompt"; message: string; images?: ImageContent[]; streamingBehavior?: "steer" | "followUp" }
+-	| { id?: string; type: "steer"; message: string; images?: ImageContent[] }
+-	| { id?: string; type: "follow_up"; message: string; images?: ImageContent[] }
+-	| { id?: string; type: "abort" }
+-	| { id?: string; type: "clear_queue" }
+-	| { id?: string; type: "new_session"; parentSession?: string }
++	(
++		| {
++				id?: string;
++				type: "prompt";
++				message: string;
++				images?: ImageContent[];
++				streamingBehavior?: "steer" | "followUp";
++		  }
++		| { id?: string; type: "steer"; message: string; images?: ImageContent[] }
++		| { id?: string; type: "follow_up"; message: string; images?: ImageContent[] }
++		| { id?: string; type: "abort" }
++		| { id?: string; type: "clear_queue" }
++		| { id?: string; type: "new_session"; parentSession?: string }
++
++		// State
++		| { id?: string; type: "get_state" }
++
++		// Model
++		| { id?: string; type: "set_model"; provider: string; modelId: string }
++		| { id?: string; type: "cycle_model" }
++		| { id?: string; type: "get_available_models" }
++
++		// Thinking
++		| { id?: string; type: "set_thinking_level"; level: ThinkingLevel }
++		| { id?: string; type: "cycle_thinking_level" }
++		| { id?: string; type: "get_available_thinking_levels" }
++
++		// Queue modes
++		| { id?: string; type: "set_steering_mode"; mode: "all" | "one-at-a-time" }
++		| { id?: string; type: "set_follow_up_mode"; mode: "all" | "one-at-a-time" }
++
++		// Compaction
++		| { id?: string; type: "compact"; customInstructions?: string }
++		| { id?: string; type: "set_auto_compaction"; enabled: boolean }
++
++		// Retry
++		| { id?: string; type: "set_auto_retry"; enabled: boolean }
++		| { id?: string; type: "abort_retry" }
++
++		// Bash
++		| { id?: string; type: "bash"; command: string; excludeFromContext?: boolean }
++		| { id?: string; type: "abort_bash" }
++
++		// Session
++		| { id?: string; type: "get_session_stats" }
++		| { id?: string; type: "export_html"; outputPath?: string }
++		| { id?: string; type: "switch_session"; sessionPath: string }
++		| { id?: string; type: "fork"; entryId: string }
++		| { id?: string; type: "clone" }
++		| { id?: string; type: "get_fork_messages" }
++		| { id?: string; type: "get_entries"; since?: string }
++		| { id?: string; type: "get_tree" }
++		| { id?: string; type: "get_last_assistant_text" }
++		| { id?: string; type: "set_session_name"; name: string }
++
++		// Messages
++		| { id?: string; type: "get_messages" }
++
++		// Commands (available for invocation via prompt)
++		| { id?: string; type: "get_commands" }
++
++		// Multiple sessions in one process
++		| { id?: string; type: "get_capabilities" }
++		| { id?: string; type: "open_session"; sessionPath?: string; cwd?: string; activate?: boolean }
++		| { id?: string; type: "close_session"; sessionId: string }
++		| { id?: string; type: "get_open_sessions" }
++	);
+ 
+-	// State
+-	| { id?: string; type: "get_state" }
+-
+-	// Model
+-	| { id?: string; type: "set_model"; provider: string; modelId: string }
+-	| { id?: string; type: "cycle_model" }
+-	| { id?: string; type: "get_available_models" }
+-
+-	// Thinking
+-	| { id?: string; type: "set_thinking_level"; level: ThinkingLevel }
+-	| { id?: string; type: "cycle_thinking_level" }
+-	| { id?: string; type: "get_available_thinking_levels" }
+-
+-	// Queue modes
+-	| { id?: string; type: "set_steering_mode"; mode: "all" | "one-at-a-time" }
+-	| { id?: string; type: "set_follow_up_mode"; mode: "all" | "one-at-a-time" }
+-
+-	// Compaction
+-	| { id?: string; type: "compact"; customInstructions?: string }
+-	| { id?: string; type: "set_auto_compaction"; enabled: boolean }
+-
+-	// Retry
+-	| { id?: string; type: "set_auto_retry"; enabled: boolean }
+-	| { id?: string; type: "abort_retry" }
+-
+-	// Bash
+-	| { id?: string; type: "bash"; command: string; excludeFromContext?: boolean }
+-	| { id?: string; type: "abort_bash" }
++// ============================================================================
++// Multi-session
++// ============================================================================
+ 
+-	// Session
+-	| { id?: string; type: "get_session_stats" }
+-	| { id?: string; type: "export_html"; outputPath?: string }
+-	| { id?: string; type: "switch_session"; sessionPath: string }
+-	| { id?: string; type: "fork"; entryId: string }
+-	| { id?: string; type: "clone" }
+-	| { id?: string; type: "get_fork_messages" }
+-	| { id?: string; type: "get_entries"; since?: string }
+-	| { id?: string; type: "get_tree" }
+-	| { id?: string; type: "get_last_assistant_text" }
+-	| { id?: string; type: "set_session_name"; name: string }
++export interface RpcCapabilities {
++	/** RPC protocol version; `2` added multi-session commands and session-tagged events. */
++	protocolVersion: number;
++	/** True when this process can hold several sessions at once via `open_session`. */
++	multiSession: boolean;
++}
+ 
+-	// Messages
+-	| { id?: string; type: "get_messages" }
++/** One live session runtime inside the RPC process. */
++export interface RpcOpenSession {
++	/** Handle id used as `sessionId` on later commands; stable for the life of the handle. */
++	sessionId: string;
++	/** pi session id of the session currently loaded in this handle. */
++	piSessionId: string;
++	sessionFile?: string;
++	cwd: string;
++	sessionName?: string;
++	isStreaming: boolean;
++	messageCount: number;
++	/** True for the handle that commands without `sessionId` are routed to. */
++	active: boolean;
++}
+ 
+-	// Commands (available for invocation via prompt)
+-	| { id?: string; type: "get_commands" };
++/** An event line as written to stdout: the session event plus the handle it came from. */
++export type RpcEventLine = JsonAgentSessionEvent & { sessionId: string };
+ 
+ // ============================================================================
+ // RPC Slash Command (for get_commands response)
+@@ -235,6 +293,24 @@ export type RpcResponse =
+ 			data: { commands: RpcSlashCommand[] };
+ 	  }
+ 
++	// Multiple sessions in one process
++	| { id?: string; type: "response"; command: "get_capabilities"; success: true; data: RpcCapabilities }
++	| { id?: string; type: "response"; command: "open_session"; success: true; data: RpcOpenSession }
++	| {
++			id?: string;
++			type: "response";
++			command: "close_session";
++			success: true;
++			data: { closed: boolean; activeSessionId: string };
++	  }
++	| {
++			id?: string;
++			type: "response";
++			command: "get_open_sessions";
++			success: true;
++			data: { activeSessionId: string; sessions: RpcOpenSession[] };
++	  }
++
+ 	// Error response (any command can fail)
+ 	| { id?: string; type: "response"; command: string; success: false; error: string };
+ 
+@@ -243,42 +319,58 @@ export type RpcResponse =
+ // ============================================================================
+ 
+ /** Emitted when an extension needs user input */
+-export type RpcExtensionUIRequest =
+-	| { type: "extension_ui_request"; id: string; method: "select"; title: string; options: string[]; timeout?: number }
+-	| { type: "extension_ui_request"; id: string; method: "confirm"; title: string; message: string; timeout?: number }
+-	| {
+-			type: "extension_ui_request";
+-			id: string;
+-			method: "input";
+-			title: string;
+-			placeholder?: string;
+-			timeout?: number;
+-	  }
+-	| { type: "extension_ui_request"; id: string; method: "editor"; title: string; prefill?: string }
+-	| {
+-			type: "extension_ui_request";
+-			id: string;
+-			method: "notify";
+-			message: string;
+-			notifyType?: "info" | "warning" | "error";
+-	  }
+-	| {
+-			type: "extension_ui_request";
+-			id: string;
+-			method: "setStatus";
+-			statusKey: string;
+-			statusText: string | undefined;
+-	  }
+-	| {
+-			type: "extension_ui_request";
+-			id: string;
+-			method: "setWidget";
+-			widgetKey: string;
+-			widgetLines: string[] | undefined;
+-			widgetPlacement?: "aboveEditor" | "belowEditor";
+-	  }
+-	| { type: "extension_ui_request"; id: string; method: "setTitle"; title: string }
+-	| { type: "extension_ui_request"; id: string; method: "set_editor_text"; text: string };
++export type RpcExtensionUIRequest = RpcSessionTarget &
++	(
++		| {
++				type: "extension_ui_request";
++				id: string;
++				method: "select";
++				title: string;
++				options: string[];
++				timeout?: number;
++		  }
++		| {
++				type: "extension_ui_request";
++				id: string;
++				method: "confirm";
++				title: string;
++				message: string;
++				timeout?: number;
++		  }
++		| {
++				type: "extension_ui_request";
++				id: string;
++				method: "input";
++				title: string;
++				placeholder?: string;
++				timeout?: number;
++		  }
++		| { type: "extension_ui_request"; id: string; method: "editor"; title: string; prefill?: string }
++		| {
++				type: "extension_ui_request";
++				id: string;
++				method: "notify";
++				message: string;
++				notifyType?: "info" | "warning" | "error";
++		  }
++		| {
++				type: "extension_ui_request";
++				id: string;
++				method: "setStatus";
++				statusKey: string;
++				statusText: string | undefined;
++		  }
++		| {
++				type: "extension_ui_request";
++				id: string;
++				method: "setWidget";
++				widgetKey: string;
++				widgetLines: string[] | undefined;
++				widgetPlacement?: "aboveEditor" | "belowEditor";
++		  }
++		| { type: "extension_ui_request"; id: string; method: "setTitle"; title: string }
++		| { type: "extension_ui_request"; id: string; method: "set_editor_text"; text: string }
++	);
+ 
+ // ============================================================================
+ // Extension UI Commands (stdin)
