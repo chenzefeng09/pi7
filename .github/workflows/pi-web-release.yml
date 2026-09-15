@@ -1,0 +1,93 @@
+name: pi-web release
+
+on:
+  push:
+    tags:
+      - "pi7-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: package-${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: win
+            os: windows-latest
+          - platform: mac
+            os: macos-latest
+          - platform: linux
+            os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: pi-web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install monorepo dependencies
+        working-directory: .
+        run: npm ci --ignore-scripts
+
+      - name: Build pi packages
+        working-directory: .
+        run: npm run build
+
+      - name: Install pi-web dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Assemble bundled runtime
+        run: node scripts/build-runtime.mjs --platform ${{ matrix.platform }}
+
+      - name: Prepare bundled agent config
+        run: npm run prepare:resources
+
+      - name: Build renderer and electron bundles
+        run: |
+          npm run build
+          npm run build:electron
+
+      - name: Install AppImage tooling
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
+
+      - name: Package Windows
+        if: matrix.platform == 'win'
+        run: npx electron-builder --win --publish never
+
+      - name: Package macOS (arm64 + x64)
+        if: matrix.platform == 'mac'
+        run: |
+          npx electron-builder --mac --arm64 --publish never
+          node scripts/build-runtime.mjs --platform mac --arch x64
+          npx electron-builder --mac --x64 --publish never
+
+      - name: Package Linux
+        if: matrix.platform == 'linux'
+        run: npx electron-builder --linux --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pi7-${{ matrix.platform }}
+          path: pi-web/release/*
+          if-no-files-found: error
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          gh release create "$TAG" --title "π7 ${TAG}" --generate-notes 2>/dev/null || true
+          gh release upload "$TAG" release/* --clobber

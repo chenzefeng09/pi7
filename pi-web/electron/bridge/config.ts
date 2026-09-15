@@ -51,6 +51,10 @@ export function resolvePiWin7Config(options: ResolvePiWin7ConfigOptions): PiWin7
 	const { dir: agentDir, source: agentDirSource } = pick();
 	if (options.isPackaged) {
 		const root = path.join(options.resourcesPath, "pi-win7");
+		// The bundled runtime ships a platform Node binary and two CLI entries: cli.win7.js
+		// targets the Node 16 bundled for Windows 7, cli.js is the normal entry the
+		// modern bundled Node runs on macOS and Linux.
+		const isWin = process.platform === "win32";
 		return {
 			agentDir,
 			agentDirSource,
@@ -62,10 +66,10 @@ export function resolvePiWin7Config(options: ResolvePiWin7ConfigOptions): PiWin7
 				"@earendil-works",
 				"pi-coding-agent",
 				"dist",
-				"cli.win7.js",
+				isWin ? "cli.win7.js" : "cli.js",
 			),
 			cwd: env.PI_WORKSPACE_CWD ?? process.cwd(),
-			nodePath: path.join(root, "node", "node.exe"),
+			nodePath: path.join(root, "node", isWin ? "node.exe" : "node"),
 			portableAgentDir,
 		};
 	}

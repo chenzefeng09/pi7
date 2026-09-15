@@ -8,7 +8,7 @@
 	"type": "module",
 	"main": "dist/electron/main.cjs",
 	"engines": {
-		"node": ">=18.18.0 <19"
+		"node": ">=18.18.0"
 	},
 	"scripts": {
 		"dev": "vite",
@@ -21,12 +21,15 @@
 		"electron:dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && electron .\"",
 		"electron:start": "npm run build:electron && electron .",
 		"prepare:resources": "node scripts/prepare-resources.mjs",
+		"build:runtime": "node scripts/build-runtime.mjs",
 		"package": "npm run prepare:resources && npm run build:electron && npm run build && electron-builder --win --dir",
 		"package:zip": "npm run prepare:resources && npm run build:electron && npm run build && electron-builder --win zip"
 	},
 	"build": {
 		"appId": "com.chenzefeng.piweb",
 		"productName": "π7",
+		"executableName": "pi7",
+		"artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
 		"files": [
 			"dist/electron/**/*",
 			"dist/renderer/**/*",
@@ -49,8 +52,28 @@
 		],
 		"win": {
 			"target": [
-				"zip"
+				"zip",
+				"nsis"
 			]
+		},
+		"nsis": {
+			"oneClick": false,
+			"allowToChangeInstallationDirectory": true
+		},
+		"mac": {
+			"target": [
+				"zip",
+				"dmg"
+			],
+			"category": "public.app-category.developer-tools"
+		},
+		"linux": {
+			"target": [
+				"AppImage",
+				"deb",
+				"zip"
+			],
+			"category": "Development"
 		},
 		"directories": {
 			"output": "release"

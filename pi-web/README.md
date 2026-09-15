@@ -2,6 +2,15 @@
 
 Local single-user desktop UI for pi on Windows 7.
 
+## Releases
+
+Pushing a `pi7-v*` tag runs `.github/workflows/pi-web-release.yml`: three runners
+(Windows, macOS, Linux) each build the pi packages, assemble the bundled runtime
+via `scripts/build-runtime.mjs`, package with electron-builder, and upload the
+installers to the GitHub release. Windows bundles Node 16 for Windows 7 support;
+macOS and Linux bundle Node 22 and run the standard `cli.js` entry. Packages are
+unsigned — Windows SmartScreen and macOS Gatekeeper will warn on first launch.
+
 ## Architecture
 
 ```text
