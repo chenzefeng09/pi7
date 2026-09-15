@@ -80,7 +80,8 @@ export function AboutDialog({ onClose, open }: { onClose: () => void; open: bool
 				<Row label="工作区" mono value={info?.cwd ?? "未连接"} />
 			</div>
 
-			<div className="mt-4 text-[11px] text-[#98a2b3]">© Earendil Works</div>
+			<div className="mt-4 text-[11px] text-[#98a2b3]">© chenzefeng · MIT</div>
+			<div className="mt-1 text-[11px] text-[#c0c6cf]">基于 pi · © Mario Zechner</div>
 
 			<button
 				className={`mt-4 h-9 w-full rounded-xl ${buttonClass("primary")}`}

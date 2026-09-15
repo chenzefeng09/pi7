@@ -3,7 +3,8 @@
 	"private": true,
 	"version": "0.1.0",
 	"description": "Local desktop web UI for pi",
-	"author": "Earendil Works",
+	"author": "chenzefeng",
+	"license": "MIT",
 	"type": "module",
 	"main": "dist/electron/main.cjs",
 	"engines": {
@@ -24,7 +25,7 @@
 		"package:zip": "npm run prepare:resources && npm run build:electron && npm run build && electron-builder --win zip"
 	},
 	"build": {
-		"appId": "com.earendilworks.piweb",
+		"appId": "com.chenzefeng.piweb",
 		"productName": "π7",
 		"files": [
 			"dist/electron/**/*",

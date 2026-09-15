@@ -10,6 +10,16 @@
 
 > New issues and PRs from new contributors are auto-closed by default. Maintainers review auto-closed issues daily. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## About this fork
+
+This is a fork of [earendil-works/pi](https://github.com/earendil-works/pi) by **chenzefeng**, adding:
+
+* **[pi-web](pi-web)** (π7): a local Electron desktop UI for pi — multi-session sidebar, queue management, file previews, scheduled tasks, permission gating
+* **Windows 7 support**: Node 16 polyfills, a `pi-win7` CLI entry, TUI compatibility fixes, and packaging scripts under [packages/coding-agent/win7](packages/coding-agent/win7)
+* **Multi-session RPC**: per-session command scheduling and session-scoped state in the JSONL RPC mode
+
+Licensing: the whole repository is MIT, same as upstream (see [LICENSE](LICENSE)). Upstream code © Mario Zechner; the additions above © chenzefeng.
+
 # Pi Agent Harness
 
 This is the home of the Pi agent harness project including our self extensible coding agent.
