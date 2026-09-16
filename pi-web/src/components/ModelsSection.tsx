@@ -95,7 +95,7 @@ function thinkingLevelsOf(model: ModelInfo | undefined): string[] {
  */
 export function ModelsSection() {
 	const currentModelId = usePiStore((state) => state.model);
-	const models = usePiStore((state) => state.models);
+	const liveModels = usePiStore((state) => state.models);
 	const [config, setConfig] = useState<ModelConfigView | undefined>(undefined);
 	const [modelQuery, setModelQuery] = useState("");
 	const [pickerOpen, setPickerOpen] = useState(false);
@@ -203,6 +203,18 @@ export function ModelsSection() {
 	};
 
 	if (!config) return <div className="py-4 text-[12px] text-[#98a2b3]">{failure || t("读取模型配置…")}</div>;
+
+	// pi only re-reads models.json at startup, so `liveModels` never shows a provider saved this
+	// session. Merge the saved config's models into the picker: the default lands in settings.json
+	// now and pi picks it up on restart — instead of the picker staying empty until then.
+	const models = [...liveModels];
+	const known = new Set(liveModels.map((model) => `${model.provider}/${model.id}`));
+	for (const provider of config.providers) {
+		for (const model of provider.models) {
+			if (known.has(`${provider.id}/${model.id}`)) continue;
+			models.push({ id: model.id, name: model.name, provider: provider.id, reasoning: model.reasoning });
+		}
+	}
 
 	const selected = models.findIndex(
 		(model) => model.id === config.defaultModel && model.provider === config.defaultProvider,
