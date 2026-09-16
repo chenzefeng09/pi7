@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { usePiStore } from "../state/store";
 import { buttonClass } from "./buttons";
 import { Modal } from "./Modal";
+import { isPlanReviewRequest, PlanReviewCard } from "./PlanReviewCard";
 import { t } from "../i18n";
 
 export function ExtensionDialogHost() {
@@ -38,6 +39,21 @@ export function ExtensionDialogHost() {
 
 	const cancel = () => void respond({ cancelled: true, id: shown.id, type: "extension_ui_response" });
 	const submitValue = () => void respond({ id: shown.id, type: "extension_ui_response", value });
+
+	if (isPlanReviewRequest(shown)) {
+		return (
+			<Modal
+				className="w-full max-w-[760px] overflow-hidden rounded-[20px] border border-line bg-surface shadow-lg"
+				onClose={cancel}
+				open={Boolean(request)}
+			>
+				<PlanReviewCard
+					onAnswer={(option) => void respond({ id: shown.id, type: "extension_ui_response", value: option })}
+					request={shown}
+				/>
+			</Modal>
+		);
+	}
 
 	return (
 		<Modal

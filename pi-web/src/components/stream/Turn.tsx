@@ -69,7 +69,7 @@ const MARKDOWN_COMPONENTS: Components = {
 };
 
 // One markdown parse per text, not per render: streamed deltas rebuild only the block they land in.
-const MarkdownBlock = memo(function MarkdownBlock({ text }: { text: string }) {
+export const MarkdownBlock = memo(function MarkdownBlock({ text }: { text: string }) {
 	return (
 		<div className="prose-pi">
 			<ReactMarkdown remarkPlugins={MARKDOWN_PLUGINS} components={MARKDOWN_COMPONENTS}>
