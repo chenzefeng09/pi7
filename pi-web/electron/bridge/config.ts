@@ -117,7 +117,18 @@ export function syncBundledAgentDir(bundledAgentDir: string, agentDir: string): 
 		}
 		if (entry.name.endsWith(".asar")) {
 			const target = path.join(agentDir, entry.name.slice(0, -".asar".length));
-			if (!fs.existsSync(target)) extractAll(from, target);
+			// Guard on a completion marker, not dir existence: an archive that throws
+			// mid-extract leaves a partial tree that must be retried, not skipped forever.
+			const marker = path.join(target, ".asar-extracted");
+			if (!fs.existsSync(marker)) {
+				try {
+					extractAll(from, target);
+					fs.writeFileSync(marker, "");
+				} catch (error) {
+					// A missing plugin set must not kill startup; the next launch retries.
+					console.error(`failed to unpack ${entry.name}:`, error);
+				}
+			}
 			continue;
 		}
 		if (!fs.existsSync(to)) {

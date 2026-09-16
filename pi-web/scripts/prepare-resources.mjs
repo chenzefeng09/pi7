@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createPackage } from "@electron/asar";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -94,28 +95,44 @@ for (const file of FILE_EXTENSIONS) {
 // tree flat; nested node_modules chains exceed Win7's 260-char MAX_PATH and silently fail
 // to install. Peers are not installed (--legacy-peer-deps): the extension loader resolves
 // pi APIs and typebox through its own aliases.
+//
+// The install must run OUTSIDE the repo: under a prefix inside this workspace, some npm
+// versions link the pi-web workspace package into node_modules (a junction to the
+// workspace root). That link ships an absolute machine path inside npm.asar and makes
+// first-run extraction throw on every other machine.
 const npmPrefix = path.join(runtimeAgent, "npm");
 fs.rmSync(npmPrefix, { force: true, recursive: true });
-fs.mkdirSync(npmPrefix, { recursive: true });
+const stagingDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-vendor-"));
 const npmDependencies = {};
 for (const spec of BUNDLED_EXTENSION_PACKAGES) {
 	const at = spec.indexOf("@", spec.startsWith("@") ? 1 : 0);
 	npmDependencies[specToPackageName(spec)] = spec.slice(at + 1);
 }
 fs.writeFileSync(
-	path.join(npmPrefix, "package.json"),
+	path.join(stagingDir, "package.json"),
 	`${JSON.stringify({ name: "pi-extensions", private: true, dependencies: npmDependencies }, null, 2)}\n`,
 );
-run(NPM, [
-	"install",
-	"--prefix",
-	npmPrefix,
-	"--legacy-peer-deps",
-	"--omit=dev",
-	"--ignore-scripts",
-	"--no-audit",
-	"--no-fund",
-]);
+run(NPM, ["install", "--legacy-peer-deps", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], {
+	cwd: stagingDir,
+});
+// Strip any reparse points npm left behind (workspace self-links, .bin shims on
+// case-sensitive filesystems): an archive entry whose link target is a machine-absolute
+// path cannot be extracted on another machine.
+function stripLinks(dir) {
+	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+		const full = path.join(dir, entry.name);
+		if (entry.isSymbolicLink()) {
+			fs.rmSync(full, { force: true, recursive: true });
+		} else if (entry.isDirectory()) {
+			stripLinks(full);
+		}
+	}
+}
+stripLinks(path.join(stagingDir, "node_modules"));
+fs.mkdirSync(npmPrefix, { recursive: true });
+fs.copyFileSync(path.join(stagingDir, "package.json"), path.join(npmPrefix, "package.json"));
+fs.cpSync(path.join(stagingDir, "node_modules"), path.join(npmPrefix, "node_modules"), { recursive: true });
+fs.rmSync(stagingDir, { force: true, recursive: true });
 // Prune test/doc/example directories inside vendored dependencies: they ship no runtime
 // value and their deep paths approach Win7's 260-char MAX_PATH under a nested install dir.
 const PRUNE_DIRS = new Set(["test", "tests", "__tests__", "docs", "example", "examples"]);

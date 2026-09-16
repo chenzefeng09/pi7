@@ -99,7 +99,22 @@ describe("syncBundledAgentDir", () => {
 		expect(existsSync(join(target, "npm.asar"))).toBe(false);
 	});
 
-	it("keeps an existing npm dir instead of re-unpacking npm.asar", async () => {
+	it("keeps a fully extracted npm dir instead of re-unpacking npm.asar", async () => {
+		const packed = mkdtempSync(join(tmpdir(), "pi-web-npm-src-"));
+		try {
+			write(packed, "node_modules/new-plugin/index.js", "module.exports = {}");
+			await createPackage(packed, join(bundled, "npm.asar"));
+		} finally {
+			rmSync(packed, { force: true, recursive: true });
+		}
+		write(target, "npm/node_modules/user-plugin/index.js", "module.exports = {}");
+		write(target, "npm/.asar-extracted", "");
+		syncBundledAgentDir(bundled, target);
+		expect(existsSync(join(target, "npm/node_modules/user-plugin/index.js"))).toBe(true);
+		expect(existsSync(join(target, "npm/node_modules/new-plugin/index.js"))).toBe(false);
+	});
+
+	it("retries a partial npm dir that has no completion marker", async () => {
 		const packed = mkdtempSync(join(tmpdir(), "pi-web-npm-src-"));
 		try {
 			write(packed, "node_modules/new-plugin/index.js", "module.exports = {}");
@@ -110,7 +125,8 @@ describe("syncBundledAgentDir", () => {
 		write(target, "npm/node_modules/user-plugin/index.js", "module.exports = {}");
 		syncBundledAgentDir(bundled, target);
 		expect(existsSync(join(target, "npm/node_modules/user-plugin/index.js"))).toBe(true);
-		expect(existsSync(join(target, "npm/node_modules/new-plugin/index.js"))).toBe(false);
+		expect(existsSync(join(target, "npm/node_modules/new-plugin/index.js"))).toBe(true);
+		expect(existsSync(join(target, "npm/.asar-extracted"))).toBe(true);
 	});
 });
 
