@@ -336,7 +336,10 @@ function composeApiKeyAuth(
 			}
 			if (inherited?.check) return inherited.check(input);
 			const resolved = await inherited?.resolve(input);
-			return resolved ? { type: "api_key", source: resolved.source } : undefined;
+			if (resolved) return { type: "api_key", source: resolved.source };
+			// A provider that declares no credential at all is configured by construction:
+			// keyless local servers have nothing to resolve and no key to wait for.
+			return inherited ? undefined : { type: "api_key", source: "no key required" };
 		},
 		resolve: async (input) => {
 			let result: AuthResult | undefined;
@@ -352,8 +355,11 @@ function composeApiKeyAuth(
 				result = inherited
 					? await inherited.resolve({ ...input, credential: { type: "api_key", key } })
 					: { auth: { apiKey: key }, source: "configured API key" };
+			} else if (inherited) {
+				result = await inherited.resolve(input);
 			} else {
-				result = await inherited?.resolve(input);
+				// Keyless by declaration: the request goes out with no credential at all.
+				result = { auth: {}, source: "no key required" };
 			}
 			if (!result) return undefined;
 			const explicitEnv = { ...(input.credential?.env ?? {}), ...(result.env ?? {}) };
