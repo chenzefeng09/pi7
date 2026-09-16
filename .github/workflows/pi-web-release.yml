@@ -71,20 +71,23 @@ jobs:
           key: ${{ runner.os }}-electron-builder-${{ hashFiles('pi-web/package.json') }}
           restore-keys: ${{ runner.os }}-electron-builder-
 
+      # The packaged tree vendors whole node_modules (~21k files); Defender's real-time scan
+      # prices every file open at ~0.25s, which turned an 80s zip step into a 90min stall.
+      - name: Exclude workspace from Defender
+        if: matrix.platform == 'win'
+        run: |
+          Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE
+          Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\electron-builder"
+          Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\electron"
+
       - name: Package Windows
         if: matrix.platform == 'win'
         timeout-minutes: 45
-        env:
-          # electron-builder resolves its binary downloads through the GitHub API; without a
-          # token the anonymous 60/h rate limit stalls the download silently for hours.
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win --publish never
 
       - name: Package macOS (arm64 + x64)
         if: matrix.platform == 'mac'
         timeout-minutes: 45
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           npx electron-builder --mac --arm64 --publish never
           node scripts/build-runtime.mjs --platform mac --arch x64
@@ -93,8 +96,6 @@ jobs:
       - name: Package Linux
         if: matrix.platform == 'linux'
         timeout-minutes: 45
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --linux --publish never
 
       - uses: actions/upload-artifact@v4
