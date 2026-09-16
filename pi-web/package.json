@@ -1,7 +1,7 @@
 {
 	"name": "pi-web",
 	"private": true,
-	"version": "0.1.7",
+	"version": "0.1.8",
 	"description": "Local desktop web UI for pi",
 	"author": "chenzefeng <chenzefeng09@users.noreply.github.com>",
 	"homepage": "https://github.com/chenzefeng09/pi7",
@@ -15,7 +15,7 @@
 		"dev": "vite",
 		"build": "tsc --noEmit && vite build",
 		"build:renderer": "vite build",
-		"build:electron": "esbuild electron/main.ts --bundle --platform=node --target=node16 --format=cjs --outfile=dist/electron/main.cjs --external:electron && esbuild electron/preload.ts --bundle --platform=node --target=node16 --format=cjs --outfile=dist/electron/preload.cjs --external:electron",
+		"build:electron": "esbuild electron/main.ts --bundle --platform=node --target=node16 --format=cjs --outfile=dist/electron/main.cjs --external:electron --external:original-fs && esbuild electron/preload.ts --bundle --platform=node --target=node16 --format=cjs --outfile=dist/electron/preload.cjs --external:electron",
 		"check": "npm run typecheck && npm test && npm run build:electron && npm run build:renderer",
 		"typecheck": "tsc --noEmit",
 		"test": "vitest --run",

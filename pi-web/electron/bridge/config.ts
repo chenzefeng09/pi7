@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { extractAll } from "@electron/asar";
 
 export interface PiWin7Config {
 	agentDir: string;
@@ -98,7 +99,10 @@ function syncBundledExtensionsDir(bundledDir: string, targetDir: string): void {
  *
  * Top-level entries (settings.json, models.json, skills/, ...) are filled in only when
  * missing, so user edits survive app upgrades. extensions/ is app-managed and refreshed
- * per entry, so shipped plugins always match the app version.
+ * per entry, so shipped plugins always match the app version. `npm.asar` packs the
+ * vendored npm plugins as one archive — the Windows release zip pays per-file I/O
+ * latency, so ~5k loose files there turned a 2-minute step into a 30-minute stall —
+ * and is unpacked to <agent>/npm with the same seed-once semantics.
  */
 export function syncBundledAgentDir(bundledAgentDir: string, agentDir: string): void {
 	if (!fs.existsSync(bundledAgentDir)) return;
@@ -109,6 +113,11 @@ export function syncBundledAgentDir(bundledAgentDir: string, agentDir: string): 
 		const to = path.join(agentDir, entry.name);
 		if (entry.isDirectory() && entry.name === "extensions") {
 			syncBundledExtensionsDir(from, to);
+			continue;
+		}
+		if (entry.name.endsWith(".asar")) {
+			const target = path.join(agentDir, entry.name.slice(0, -".asar".length));
+			if (!fs.existsSync(target)) extractAll(from, target);
 			continue;
 		}
 		if (!fs.existsSync(to)) {

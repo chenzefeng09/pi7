@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createPackage } from "@electron/asar";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resolvePiWin7Config, syncBundledAgentDir } from "./config";
 
@@ -79,6 +80,37 @@ describe("syncBundledAgentDir", () => {
 		write(target, "extensions/pi-todo/src/user-note.ts", "// user file inside package");
 		syncBundledAgentDir(bundled, target);
 		expect(existsSync(join(target, "extensions/pi-todo/src/user-note.ts"))).toBe(true);
+	});
+
+	it("unpacks npm.asar into the agent dir", async () => {
+		const packed = mkdtempSync(join(tmpdir(), "pi-web-npm-src-"));
+		try {
+			write(packed, "node_modules/pi-plan-extension/package.json", `{"name":"pi-plan-extension"}`);
+			write(packed, "node_modules/pi-plan-extension/extensions/plan/index.ts", "export default () => {}");
+			await createPackage(packed, join(bundled, "npm.asar"));
+		} finally {
+			rmSync(packed, { force: true, recursive: true });
+		}
+		syncBundledAgentDir(bundled, target);
+		expect(readFileSync(join(target, "npm/node_modules/pi-plan-extension/package.json"), "utf8")).toContain(
+			"pi-plan-extension",
+		);
+		expect(existsSync(join(target, "npm/node_modules/pi-plan-extension/extensions/plan/index.ts"))).toBe(true);
+		expect(existsSync(join(target, "npm.asar"))).toBe(false);
+	});
+
+	it("keeps an existing npm dir instead of re-unpacking npm.asar", async () => {
+		const packed = mkdtempSync(join(tmpdir(), "pi-web-npm-src-"));
+		try {
+			write(packed, "node_modules/new-plugin/index.js", "module.exports = {}");
+			await createPackage(packed, join(bundled, "npm.asar"));
+		} finally {
+			rmSync(packed, { force: true, recursive: true });
+		}
+		write(target, "npm/node_modules/user-plugin/index.js", "module.exports = {}");
+		syncBundledAgentDir(bundled, target);
+		expect(existsSync(join(target, "npm/node_modules/user-plugin/index.js"))).toBe(true);
+		expect(existsSync(join(target, "npm/node_modules/new-plugin/index.js"))).toBe(false);
 	});
 });
 

@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createPackage } from "@electron/asar";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -172,7 +173,15 @@ for (const entry of fs.readdirSync(targetExtensions, { withFileTypes: true })) {
 		fs.rmSync(path.join(targetExtensions, entry.name), { force: true, recursive: true });
 	}
 }
-console.log(`installed ${BUNDLED_EXTENSION_PACKAGES.length} packages -> config/agent/npm`);
+// Ship the vendored npm tree as one asar archive instead of ~5k loose files: the Windows
+// release zip pays per-file I/O latency, which turned a 2-minute packaging step into a
+// 30-minute stall. Electron main unpacks it to <agent>/npm on first run
+// (syncBundledAgentDir in electron/bridge/config.ts).
+const npmAsar = `${npmPrefix}.asar`;
+fs.rmSync(npmAsar, { force: true });
+await createPackage(npmPrefix, npmAsar);
+fs.rmSync(npmPrefix, { force: true, recursive: true });
+console.log(`installed ${BUNDLED_EXTENSION_PACKAGES.length} packages -> config/agent/npm.asar`);
 
 for (const entry of fs.readdirSync(targetExtensions)) {
 	if (entry.endsWith("-test.ts")) {
