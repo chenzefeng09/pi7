@@ -129,7 +129,42 @@ function pruneNestedDirs(dir) {
 		pruneNestedDirs(full);
 	}
 }
-pruneNestedDirs(path.join(npmPrefix, "node_modules"));
+const nmRoot = path.join(npmPrefix, "node_modules");
+pruneNestedDirs(nmRoot);
+
+// File-level pruning: declarations, sourcemaps, docs, and repo dot-configs are dead weight
+// at runtime. Their count (~40% of the tree) directly prices the Windows release zip step,
+// which pays Defender real-time-scan latency per file. TypeScript sources are kept only
+// inside the vendored plugin packages themselves — pi's extension loader may resolve a
+// plugin's own .ts entry — while .ts in transitive deps is unreachable dead source.
+const JUNK_FILE =
+	/\.d\.(?:c|m)?ts$|\.map$|\.md$|^LICEN[SC]E|^CHANGELOG|^CHANGES|^HISTORY|^\.nycrc|^\.eslintrc|^\.editorconfig$|^\.prettierrc|^\.babelrc|^\.travis\.yml$|^\.gitignore$|^\.gitattributes$|^\.npmignore$|^\.eslintignore$|^\.prettierignore$|^\.DS_Store$|^\.tern-project$|^\.gitmodules$|^\.yarnrc|^appveyor\.yml$|^\.coveralls\.yml$|^tsconfig\.json$|^tslint\.json$/i;
+const DEAD_SOURCE = /\.(?:c|m)?ts$/;
+function pruneJunkFiles(dir, insidePluginPkg) {
+	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+		const full = path.join(dir, entry.name);
+		if (entry.isDirectory()) {
+			pruneJunkFiles(full, insidePluginPkg && entry.name !== "node_modules");
+			continue;
+		}
+		if (JUNK_FILE.test(entry.name) || (!insidePluginPkg && DEAD_SOURCE.test(entry.name))) {
+			fs.rmSync(full, { force: true });
+		}
+	}
+}
+const pluginTopDirs = new Set(BUNDLED_EXTENSION_PACKAGES.map((spec) => specToPackageName(spec)));
+for (const entry of fs.readdirSync(nmRoot, { withFileTypes: true })) {
+	if (!entry.isDirectory() || entry.name === ".bin") continue;
+	if (entry.name.startsWith("@")) {
+		for (const sub of fs.readdirSync(path.join(nmRoot, entry.name), { withFileTypes: true })) {
+			if (sub.isDirectory()) {
+				pruneJunkFiles(path.join(nmRoot, entry.name, sub.name), pluginTopDirs.has(`${entry.name}/${sub.name}`));
+			}
+		}
+	} else {
+		pruneJunkFiles(path.join(nmRoot, entry.name), pluginTopDirs.has(entry.name));
+	}
+}
 
 // Drop any stale vendored package dirs from earlier builds; file extensions stay.
 for (const entry of fs.readdirSync(targetExtensions, { withFileTypes: true })) {

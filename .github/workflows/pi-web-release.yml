@@ -73,12 +73,17 @@ jobs:
 
       # The packaged tree vendors whole node_modules (~21k files); Defender's real-time scan
       # prices every file open at ~0.25s, which turned an 80s zip step into a 90min stall.
+      # Path exclusions alone did not stick, so also exclude the processes doing the I/O.
       - name: Exclude workspace from Defender
         if: matrix.platform == 'win'
         run: |
           Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE
           Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\electron-builder"
           Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\electron"
+          Add-MpPreference -ExclusionProcess app-builder.exe
+          Add-MpPreference -ExclusionProcess node.exe
+          Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
+          Get-MpPreference | Select-Object -ExpandProperty ExclusionProcess
 
       - name: Package Windows
         if: matrix.platform == 'win'
