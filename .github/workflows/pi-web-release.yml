@@ -61,12 +61,30 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
 
+      - name: Cache electron-builder binaries
+        if: matrix.platform == 'win'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron-builder\Cache
+            ~\AppData\Local\electron\Cache
+          key: ${{ runner.os }}-electron-builder-${{ hashFiles('pi-web/package.json') }}
+          restore-keys: ${{ runner.os }}-electron-builder-
+
       - name: Package Windows
         if: matrix.platform == 'win'
+        timeout-minutes: 45
+        env:
+          # electron-builder resolves its binary downloads through the GitHub API; without a
+          # token the anonymous 60/h rate limit stalls the download silently for hours.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win --publish never
 
       - name: Package macOS (arm64 + x64)
         if: matrix.platform == 'mac'
+        timeout-minutes: 45
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           npx electron-builder --mac --arm64 --publish never
           node scripts/build-runtime.mjs --platform mac --arch x64
@@ -74,6 +92,9 @@ jobs:
 
       - name: Package Linux
         if: matrix.platform == 'linux'
+        timeout-minutes: 45
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --linux --publish never
 
       - uses: actions/upload-artifact@v4
