@@ -5,6 +5,7 @@ import {
 	mkdtempSync,
 	readFileSync,
 	rmSync,
+	statSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -58,6 +59,32 @@ describe("syncBundledAgentDir", () => {
 		expect(readFileSync(join(target, "settings.json"), "utf8")).toContain("light");
 	});
 
+	it("merges bundled packages into an existing settings.json", () => {
+		write(bundled, "settings.json", `{"theme":"dark","packages":["npm:a","npm:b"]}`);
+		write(target, "settings.json", `{"theme":"light","packages":["npm:mine"]}`);
+		syncBundledAgentDir(bundled, target);
+		const settings = JSON.parse(readFileSync(join(target, "settings.json"), "utf8")) as {
+			packages?: unknown;
+			theme?: unknown;
+		};
+		expect(settings.theme).toBe("light");
+		expect(settings.packages).toEqual(["npm:mine", "npm:a", "npm:b"]);
+	});
+
+	it("does not rewrite settings.json when every bundled package is declared", () => {
+		write(bundled, "settings.json", `{"packages":["npm:a"]}`);
+		write(target, "settings.json", `{"packages":["npm:a","npm:mine"]}`);
+		syncBundledAgentDir(bundled, target);
+		expect(readFileSync(join(target, "settings.json"), "utf8")).toBe(`{"packages":["npm:a","npm:mine"]}`);
+	});
+
+	it("leaves a corrupt settings.json for the user to fix", () => {
+		write(bundled, "settings.json", `{"packages":["npm:a"]}`);
+		write(target, "settings.json", "{not json");
+		syncBundledAgentDir(bundled, target);
+		expect(readFileSync(join(target, "settings.json"), "utf8")).toBe("{not json");
+	});
+
 	it("refreshes bundled files and keeps user-added entries", () => {
 		write(target, "extensions/ask-user.ts", "// stale");
 		write(target, "extensions/mine.ts", "// user file");
@@ -108,10 +135,24 @@ describe("syncBundledAgentDir", () => {
 			rmSync(packed, { force: true, recursive: true });
 		}
 		write(target, "npm/node_modules/user-plugin/index.js", "module.exports = {}");
-		write(target, "npm/.asar-extracted", "");
+		write(target, "npm/.asar-extracted", String(statSync(join(bundled, "npm.asar")).mtimeMs));
 		syncBundledAgentDir(bundled, target);
 		expect(existsSync(join(target, "npm/node_modules/user-plugin/index.js"))).toBe(true);
 		expect(existsSync(join(target, "npm/node_modules/new-plugin/index.js"))).toBe(false);
+	});
+
+	it("re-unpacks npm.asar when the shipped archive changed", async () => {
+		const packed = mkdtempSync(join(tmpdir(), "pi-web-npm-src-"));
+		try {
+			write(packed, "node_modules/new-plugin/index.js", "module.exports = {}");
+			await createPackage(packed, join(bundled, "npm.asar"));
+		} finally {
+			rmSync(packed, { force: true, recursive: true });
+		}
+		write(target, "npm/node_modules/old-plugin/index.js", "module.exports = {}");
+		write(target, "npm/.asar-extracted", "0");
+		syncBundledAgentDir(bundled, target);
+		expect(existsSync(join(target, "npm/node_modules/new-plugin/index.js"))).toBe(true);
 	});
 
 	it("retries a partial npm dir that has no completion marker", async () => {

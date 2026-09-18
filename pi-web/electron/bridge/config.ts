@@ -95,14 +95,51 @@ function syncBundledExtensionsDir(bundledDir: string, targetDir: string): void {
 }
 
 /**
+ * The bundled settings file is a seed plus one app-owned field: when the target already
+ * exists the user's keys are left alone, but the shipped `packages` entries are merged in
+ * because pi loads an npm package only when settings.json declares it — without the merge
+ * every bundled plugin stays dead code in a directory the user owned first.
+ */
+function syncBundledSettings(from: string, to: string): void {
+	if (!fs.existsSync(to)) {
+		fs.copyFileSync(from, to);
+		return;
+	}
+	let bundledPackages: unknown[];
+	try {
+		const bundled = JSON.parse(fs.readFileSync(from, "utf8")) as { packages?: unknown };
+		if (!Array.isArray(bundled.packages)) return;
+		bundledPackages = bundled.packages;
+	} catch {
+		return;
+	}
+	let target: Record<string, unknown>;
+	try {
+		const parsed = JSON.parse(fs.readFileSync(to, "utf8")) as unknown;
+		if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return;
+		target = parsed as Record<string, unknown>;
+	} catch {
+		// A corrupt settings file is the user's problem to fix; merging into it would
+		// quietly rewrite whatever is in there.
+		return;
+	}
+	const current = Array.isArray(target.packages) ? target.packages : [];
+	const missing = bundledPackages.filter((source) => !current.includes(source));
+	if (missing.length === 0) return;
+	target.packages = [...current, ...missing];
+	fs.writeFileSync(to, `${JSON.stringify(target, null, "\t")}\n`, "utf8");
+}
+
+/**
  * Sync the bundled agent template into a user-writable agent dir.
  *
- * Top-level entries (settings.json, models.json, skills/, ...) are filled in only when
- * missing, so user edits survive app upgrades. extensions/ is app-managed and refreshed
- * per entry, so shipped plugins always match the app version. `npm.asar` packs the
- * vendored npm plugins as one archive — the Windows release zip pays per-file I/O
- * latency, so ~5k loose files there turned a 2-minute step into a 30-minute stall —
- * and is unpacked to <agent>/npm with the same seed-once semantics.
+ * Top-level entries (models.json, skills/, ...) are filled in only when missing, so user
+ * edits survive app upgrades; settings.json is the exception — its bundled `packages`
+ * are merged into an existing file. extensions/ is app-managed and refreshed per entry,
+ * so shipped plugins always match the app version. `npm.asar` packs the vendored npm
+ * plugins as one archive — the Windows release zip pays per-file I/O latency, so ~5k
+ * loose files there turned a 2-minute step into a 30-minute stall — and is unpacked to
+ * <agent>/npm with the same seed-once semantics.
  */
 export function syncBundledAgentDir(bundledAgentDir: string, agentDir: string): void {
 	if (!fs.existsSync(bundledAgentDir)) return;
@@ -115,15 +152,22 @@ export function syncBundledAgentDir(bundledAgentDir: string, agentDir: string): 
 			syncBundledExtensionsDir(from, to);
 			continue;
 		}
+		if (entry.name === "settings.json" && !entry.isDirectory()) {
+			syncBundledSettings(from, to);
+			continue;
+		}
 		if (entry.name.endsWith(".asar")) {
 			const target = path.join(agentDir, entry.name.slice(0, -".asar".length));
-			// Guard on a completion marker, not dir existence: an archive that throws
-			// mid-extract leaves a partial tree that must be retried, not skipped forever.
+			// The marker records which archive was unpacked, not just that one was: an app
+			// upgrade ships a different asar, and an extracted tree that never refreshes
+			// would pin the shipped plugins at the version first installed forever.
 			const marker = path.join(target, ".asar-extracted");
-			if (!fs.existsSync(marker)) {
+			const stamp = String(fs.statSync(from).mtimeMs);
+			const extracted = fs.existsSync(marker) && fs.readFileSync(marker, "utf8") === stamp;
+			if (!extracted) {
 				try {
 					extractAll(from, target);
-					fs.writeFileSync(marker, "");
+					fs.writeFileSync(marker, stamp);
 				} catch (error) {
 					// A missing plugin set must not kill startup; the next launch retries.
 					console.error(`failed to unpack ${entry.name}:`, error);

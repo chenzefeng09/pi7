@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell, Tray } from "electron";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -18,6 +18,35 @@ import { localeFromTag, setLocale, t } from "../src/i18n";
 
 let client: PiRpcClient | undefined;
 let mainWindow: BrowserWindow | undefined;
+let tray: Tray | undefined;
+
+async function ensureTray(): Promise<void> {
+	if (tray) return;
+	// Dev and Linux read the repo icon; packaged Windows builds carry it inside the exe,
+	// which is not an image file createFromPath can read — the shell's icon lookup can.
+	let icon = nativeImage.createFromPath(path.join(app.getAppPath(), "build", "icon.png"));
+	if (icon.isEmpty()) {
+		try {
+			icon = await app.getFileIcon(process.execPath, { size: "small" });
+		} catch {
+			icon = nativeImage.createEmpty();
+		}
+	}
+	const show = (): void => {
+		mainWindow?.show();
+		mainWindow?.focus();
+	};
+	tray = new Tray(icon);
+	tray.setToolTip("π7");
+	tray.setContextMenu(
+		Menu.buildFromTemplate([
+			{ click: show, label: t("显示 π7") },
+			{ type: "separator" },
+			{ click: () => app.quit(), label: t("退出 π7") },
+		]),
+	);
+	tray.on("click", show);
+}
 
 interface SessionListItem {
 	cwd?: string;
@@ -345,6 +374,15 @@ function createWindow(): void {
 	} else {
 		void window.loadURL("http://127.0.0.1:5173");
 	}
+	window.on("close", (event) => {
+		// The X button hides to the tray instead of killing pi: sessions, runs and scheduled
+		// tasks keep working in the background; the tray menu's 退出 is the real quit.
+		if (!quitting) {
+			event.preventDefault();
+			window.hide();
+			void ensureTray();
+		}
+	});
 	window.on("closed", () => {
 		if (mainWindow === window) mainWindow = undefined;
 	});
@@ -857,15 +895,18 @@ void app.whenReady().then(() => {
 	// Portable layout: <app root>/data/agent travels with the app folder.
 	process.env.PI_WEB_APP_ROOT =
 		process.env.PI_WEB_APP_ROOT ?? (app.isPackaged ? path.dirname(app.getPath("exe")) : app.getAppPath());
-	// The portable agent dir is the only one the installer owns: seed it from the bundled
-	// config/agent (settings, models, shipped extensions) before the first pi process starts.
+	// Whichever agent dir won, the bundled payload (shipped extensions, vendored npm packages)
+	// has to land in it — pi reads plugins only from the agent dir, so a home-dir install
+	// would otherwise run with no bundled extensions at all. Only an explicit
+	// PI_CODING_AGENT_DIR override is left untouched; seeding preserves user files.
 	const startupConfig = resolvePiWin7Config({
 		isPackaged: app.isPackaged,
 		resourcesPath: process.resourcesPath,
 	});
-	if (startupConfig.agentDirSource === "portable") {
+	if (startupConfig.agentDirSource !== "env") {
+		const resourcesRoot = app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), "resources");
 		syncBundledAgentDir(
-			path.join(process.resourcesPath, "pi-win7", "config", "agent"),
+			path.join(resourcesRoot, "pi-win7", "config", "agent"),
 			startupConfig.agentDir,
 		);
 	}
