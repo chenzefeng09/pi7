@@ -1,7 +1,7 @@
 {
 	"name": "pi-web",
 	"private": true,
-	"version": "0.1.11",
+	"version": "0.1.12",
 	"description": "Local desktop web UI for pi",
 	"author": "chenzefeng <chenzefeng09@users.noreply.github.com>",
 	"homepage": "https://github.com/chenzefeng09/pi7",
@@ -28,7 +28,7 @@
 	},
 	"build": {
 		"appId": "com.chenzefeng.piweb",
-		"productName": "蟺7",
+		"productName": "锜?",
 		"executableName": "pi7",
 		"artifactName": "pi7-${version}-${os}-${arch}.${ext}",
 		"files": [
