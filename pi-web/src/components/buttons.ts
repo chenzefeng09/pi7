@@ -22,11 +22,19 @@ const ROLES = {
  * look inert in one dialog and alive in the next. One definition per role keeps the four
  * interaction states identical everywhere, and a caller only picks the role and the size.
  */
-export function buttonClass(role: ButtonRole = "secondary", size: keyof typeof SIZES = "md"): string {
+export function buttonClass(
+	role: ButtonRole = "secondary",
+	size: keyof typeof SIZES = "md",
+	wrap = false,
+): string {
 	return [
 		// A flex box: without it a button in a row shrinks and wraps its label into two lines, which
-		// is what made the settings buttons look deformed next to a text field.
-		"inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg font-medium transition-colors",
+		// is what made the settings buttons look deformed next to a text field. `wrap` opts out of
+		// that single-line contract for buttons whose label is user content (extension select
+		// options), where truncating to one line would overflow the dialog.
+		wrap
+			? "inline-flex shrink-0 items-start justify-start gap-1.5 whitespace-normal break-words rounded-lg font-medium transition-colors"
+			: "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg font-medium transition-colors",
 		"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2f7df6]/40",
 		"disabled:cursor-default",
 		SIZES[size],

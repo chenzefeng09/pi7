@@ -89,10 +89,10 @@ export function ExtensionDialogHost() {
 				) : null}
 
 				{shown.method === "select" ? (
-					<div className="mt-4 flex flex-col gap-2">
+					<div className="scrollbar-subtle mt-4 flex max-h-[min(52vh,420px)] flex-col gap-2 overflow-y-auto">
 						{(shown.options ?? []).map((option) => (
 							<button
-								className={`text-left ${buttonClass()}`}
+								className={`text-left ${buttonClass("secondary", "md", true)}`}
 								key={option}
 								onClick={() => void respond({ id: shown.id, type: "extension_ui_response", value: option })}
 								type="button"
