@@ -4,7 +4,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage, ImageBlock, MessageBlock } from "../../state/types";
 import { buttonClass } from "../buttons";
-import { formatClock } from "../usage";
+import { formatClock, formatDuration } from "../usage";
 import { TurnTimePill, TurnUsagePill } from "../TurnStats";
 import { MessageImages } from "./MessageImages";
 import { ReasoningRow } from "./ReasoningRow";
@@ -393,7 +393,8 @@ export const TurnView = memo(function TurnView({
 });
 
 /**
- * The running turn's status line, mounted once by the transcript rather than by each turn.
+ * The running turn's status line, mounted once by the transcript as the virtual tail row rather
+ * than by each turn.
  *
  * The TUI answers this with one status bar that `turn_start` raises and `agent_end` clears, and
  * dsh renders one `role="status"` line anchored to `turn/start`. Asking each turn whether any of
@@ -401,7 +402,29 @@ export const TurnView = memo(function TurnView({
  * a 正在思考… line behind after an abort, and one line per unfinished turn.
  *
  * `executing` only chooses the wording: the run is on its tools rather than on the model.
+ *
+ * The clock is the dsh turn-status clock: anchored to the prompt that opened the run so a long
+ * prefill reads as elapsed work, and only shown once the run has clearly been going a while —
+ * short turns keep the plain label.
  */
-export function TurnStatus({ executing }: { executing: boolean }) {
-	return <div className="turn-status">{executing ? t("正在执行…") : t("正在思考…")}</div>;
+export function TurnStatus({ executing, startTime }: { executing: boolean; startTime?: number }) {
+	const [mountedAt] = useState(() => Date.now());
+	const anchor = startTime ?? mountedAt;
+	const [elapsedMs, setElapsedMs] = useState(() => Math.max(0, Date.now() - anchor));
+	useEffect(() => {
+		const tick = () => setElapsedMs(Math.max(0, Date.now() - anchor));
+		tick();
+		const id = window.setInterval(tick, 1000);
+		return () => window.clearInterval(id);
+	}, [anchor]);
+	return (
+		<div aria-live="polite" className="turn-status" role="status">
+			{executing ? t("正在执行…") : t("正在思考…")}
+			{elapsedMs >= 15_000 ? (
+				<span aria-hidden className="turn-status-clock">
+					{formatDuration(elapsedMs)}
+				</span>
+			) : null}
+		</div>
+	);
 }

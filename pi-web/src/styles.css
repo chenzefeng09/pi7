@@ -564,6 +564,15 @@ html[data-input="keyboard"] button:focus-visible {
 	}
 }
 
+/* The run clock inside the shimmer line opts out of the gradient text fill: the parent clips
+   background to transparent text, so the span has to paint its own caption color. */
+.turn-status-clock {
+	color: var(--pi-ink-caption);
+	font-variant-numeric: tabular-nums;
+	margin-left: 8px;
+	-webkit-text-fill-color: var(--pi-ink-caption);
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.row-sweep {
 		animation: none;

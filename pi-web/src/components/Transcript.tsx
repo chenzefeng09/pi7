@@ -156,8 +156,16 @@ export function Transcript() {
 		(entryId: string, text: string) => editAndResend(entryId, text),
 		[editAndResend],
 	);
+	const count = turns.length;
+	// The run's state comes from pi, not from the transcript's own per-message marks: a message
+	// left behind as `streaming` by an abort or a reload must not keep the flow looking busy.
+	const running = status === "streaming";
+	const showTurnStatus = running && count > 0;
+	// The status line is a virtual tail row, not a div after the scroll area: out of the scroll
+	// flow it sat inside the band the floating composer covers, so it never painted at all.
+	const rowCount = count + (showTurnStatus ? 1 : 0);
 	const virtualizer = useVirtualizer({
-		count: turns.length,
+		count: rowCount,
 		estimateSize: () => 120,
 		getScrollElement: () => parentRef.current,
 		overscan: 6,
@@ -167,7 +175,6 @@ export function Transcript() {
 		paddingEnd: 172,
 		paddingStart: 24,
 	});
-	const count = turns.length;
 	// A different session has to open at its end even though the row count may not change.
 	const sessionKey = sessionFile ?? sessionId;
 	const jumpRequest = useUiStore((state) => state.jumpToBottomRequest);
@@ -186,7 +193,7 @@ export function Transcript() {
 
 	useEffect(() => {
 		const element = parentRef.current;
-		if (count === 0 || !element) return;
+		if (rowCount === 0 || !element) return;
 		let cancelled = false;
 		let tries = 0;
 		// The end has to be re-asserted: the virtualizer places it with row *estimates* and then
@@ -199,7 +206,7 @@ export function Transcript() {
 			// for the element's maximum: the end the virtualizer computes for a row is clamped to
 			// its own total, and going through scrollToOffset keeps its offset in step with where
 			// the element actually ends up — writing scrollTop directly just gets reverted.
-			virtualizer.scrollToIndex(count - 1, { align: "end" });
+			virtualizer.scrollToIndex(rowCount - 1, { align: "end" });
 			const max = element.scrollHeight - element.clientHeight;
 			if (Math.abs(element.scrollTop - max) > 2) virtualizer.scrollToOffset(max);
 			const gap = element.scrollHeight - element.scrollTop - element.clientHeight;
@@ -216,7 +223,7 @@ export function Transcript() {
 		return () => {
 			cancelled = true;
 		};
-	}, [count, jumpRequest, sessionKey, totalSize, virtualizer]);
+	}, [jumpRequest, rowCount, sessionKey, totalSize, virtualizer]);
 
 	// Rail marks: one per exchange — the prompt and the answer it got. The rail spaces them at a
 	// fixed pitch, so unlike the transcript they need no measured offsets.
@@ -244,15 +251,29 @@ export function Transcript() {
 			activeIndex = mark.index;
 		}
 	}
-	// The run's state comes from pi, not from the transcript's own per-message marks: a message
-	// left behind as `streaming` by an abort or a reload must not keep the flow looking busy.
-	const running = status === "streaming";
 	const busyIndex = running ? turns.length - 1 : undefined;
 	const lastTurn = turns[turns.length - 1];
-	const workingBlock = lastTurn?.messages.at(-1)?.blocks.at(-1);
-	// No status line under a prompt the run has not answered yet: at that moment there is no work to
-	// report, and the line would claim the model is thinking about a turn that has not started.
-	const showTurnStatus = running && lastTurn?.role === "assistant" && Boolean(workingBlock);
+	// The line reports the run, not the tail turn: during prefill — and with a queued prompt at the
+	// tail — the last turn is the user's, but the run is already working on it. `executing` follows
+	// the tool the running turn is on, so it reads the latest assistant turn rather than the tail.
+	let runTurn: Turn | undefined;
+	for (let index = turns.length - 1; index >= 0; index -= 1) {
+		if (turns[index].role === "assistant") {
+			runTurn = turns[index];
+			break;
+		}
+	}
+	const workingBlock = runTurn?.messages.at(-1)?.blocks.at(-1);
+	const executing = workingBlock?.type === "toolCall" && workingBlock.state === "running";
+	// The status clock anchors on the prompt that opened this run: the user message is stamped at
+	// send time, while the assistant step only gets its own timestamp when it settles.
+	let runStart: number | undefined;
+	for (let index = turns.length - 1; index >= 0; index -= 1) {
+		if (turns[index].role === "user") {
+			runStart = turns[index].messages[0]?.createdAt;
+			break;
+		}
+	}
 	// The rail sits in the band above the floating composer.
 	const bandHeight = Math.max(0, (parentRef.current?.clientHeight ?? 0) - 188);
 
@@ -294,32 +315,29 @@ export function Transcript() {
 									ref={virtualizer.measureElement}
 									style={{ transform: `translateY(${item.start}px)` }}
 								>
-									<TurnView
-										compact={compact}
-										cwd={cwd}
-										entryId={entryIds[item.index]}
-										onClone={onClone}
-										onResend={onResend}
-										// The meter tracks the running turn, so only the tail turn may
-										// claim its rate; older answers would show someone else's speed.
-										tokensPerSecond={
-											item.index === count - 1 ? outputTokensPerSecond : undefined
-										}
-										turn={turns[item.index]}
-									/>
+									{item.index === count ? (
+										<TurnStatus executing={executing} startTime={runStart} />
+									) : (
+										<TurnView
+											compact={compact}
+											cwd={cwd}
+											entryId={entryIds[item.index]}
+											onClone={onClone}
+											onResend={onResend}
+											// The meter tracks the running turn, so only the tail turn may
+											// claim its rate; older answers would show someone else's speed.
+											tokensPerSecond={
+												item.index === count - 1 ? outputTokensPerSecond : undefined
+											}
+											turn={turns[item.index]}
+										/>
+									)}
 								</div>
 							))}
 						</div>
 					</div>
 				)}
 			</div>
-			{showTurnStatus ? (
-				// One line for the session, in the column the turns use, so it reads as the tail of
-				// the flow rather than as part of one answer.
-				<div className="mx-auto w-full max-w-[860px] px-6 pb-2">
-					<TurnStatus executing={workingBlock?.type === "toolCall"} />
-				</div>
-			) : null}
 			{count > 0 ? (
 				<TurnRail
 					activeIndex={activeIndex}
